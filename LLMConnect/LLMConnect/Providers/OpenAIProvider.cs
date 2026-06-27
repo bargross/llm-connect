@@ -5,16 +5,13 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace LLMConnect;
+namespace LLMConnect.Providers;
 
 internal class OpenAIProvider(HttpClient httpClient, LLMClientOptions options) : ILLMProvider
 {
-    private readonly int _maxRetries = options.MaxRetries;
-
     public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
         var openAiRequest = request.ToOpenAIRequest(options.DefaultModel);
-
         var json = JsonSerializer.Serialize(openAiRequest, new JsonSerializerOptions
         {
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
@@ -22,54 +19,12 @@ internal class OpenAIProvider(HttpClient httpClient, LLMClientOptions options) :
 
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        HttpResponseMessage? response = null;
-        int retryCount = 0;
-
-        while (retryCount <= _maxRetries)
-        {
-            try
-            {
-                response = await httpClient.PostAsync("", content, cancellationToken);
-                if (response.IsSuccessStatusCode)
-                    break;
-
-                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests && retryCount < _maxRetries)
-                {
-                    var retryAfter = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(2);
-                    await Task.Delay(retryAfter, cancellationToken);
-
-                    retryCount++;
-
-                    continue;
-                }
-
-                var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
-                var error = JsonSerializer.Deserialize<OpenAIErrorResponse>(errorJson);
-
-                throw new LLMConnectException("OpenAI", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
-            }
-            catch (HttpRequestException ex) when (retryCount < _maxRetries)
-            {
-                retryCount++;
-
-                await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, retryCount)), cancellationToken);
-
-                continue;
-            }
-            catch (Exception ex)
-            {
-                throw new LLMConnectException("OpenAI", ex.Message, ex);
-            }
-        }
-
-        if (response == null)
-            throw new LLMConnectException("OpenAI", "Failed to get a response after retries");
+        var response = await httpClient.PostAsync("", content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
             var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
             var error = JsonSerializer.Deserialize<OpenAIErrorResponse>(errorJson);
-
             throw new LLMConnectException("OpenAI", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
         }
 
@@ -85,7 +40,7 @@ internal class OpenAIProvider(HttpClient httpClient, LLMClientOptions options) :
     public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
         var openAiRequest = request.ToOpenAIRequest(options.DefaultModel);
-        
+
         openAiRequest.Stream = true;
 
         var json = JsonSerializer.Serialize(openAiRequest, new JsonSerializerOptions
@@ -95,54 +50,11 @@ internal class OpenAIProvider(HttpClient httpClient, LLMClientOptions options) :
 
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        int retryCount = 0;
-        HttpResponseMessage? response = null;
-
-        while (retryCount <= _maxRetries)
-        {
-            try
-            {
-                response = await httpClient.PostAsync("", content, cancellationToken);
-                if (response.IsSuccessStatusCode)
-                    break;
-
-                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests && retryCount < _maxRetries)
-                {
-                    var retryAfter = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(2);
-                    await Task.Delay(retryAfter, cancellationToken);
-
-                    retryCount++;
-
-                    continue;
-                }
-
-                var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
-
-                var error = JsonSerializer.Deserialize<OpenAIErrorResponse>(errorJson);
-
-                throw new LLMConnectException("OpenAI", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
-            }
-            catch (HttpRequestException ex) when (retryCount < _maxRetries)
-            {
-                retryCount++;
-
-                await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, retryCount)), cancellationToken);
-
-                continue;
-            }
-            catch (Exception ex)
-            {
-                throw new LLMConnectException("OpenAI", ex.Message, ex);
-            }
-        }
-
-        if (response == null)
-            throw new LLMConnectException("OpenAI", "Failed to get a response after retries");
+        var response = await httpClient.PostAsync("", content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
             var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
-
             var error = JsonSerializer.Deserialize<OpenAIErrorResponse>(errorJson);
 
             throw new LLMConnectException("OpenAI", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
@@ -161,9 +73,7 @@ internal class OpenAIProvider(HttpClient httpClient, LLMClientOptions options) :
             {
                 var data = line.Substring(6);
                 if (data == "[DONE]")
-                {
                     yield break;
-                }
 
                 OpenAiStreamChunk? chunk = null;
                 try

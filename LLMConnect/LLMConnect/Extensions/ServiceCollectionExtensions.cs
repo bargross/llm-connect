@@ -1,76 +1,67 @@
-﻿using LLMConnect.Models;
-using LLMConnect.Settings;
+﻿using LLMConnect.Settings;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
+using Polly;
+using System.Threading.RateLimiting;
 
 namespace LLMConnect.Configuration;
 
 public static class ServiceCollectionExtensions
 {
-    // 👇 Simple: user provides configuration
     public static IServiceCollection AddLLMConnect(
         this IServiceCollection services,
-        Action<LLMClientOptions> configure)
+        Action<LLMClientOptions>? configure = null,
+        Action<ResiliencePipelineBuilder<HttpResponseMessage>>? configureResilience = null)
     {
-        services.Configure(configure);
+        if (configure != null)
+            services.Configure(configure);
+        else
+            services.Configure<LLMClientOptions>(_ => { });
 
-        // Register the HttpClientFactory and the provider factory
-        services.AddHttpClient("LLMConnect");
-        services.AddSingleton<ILLMProviderFactory, LLMProviderFactory>();
+        services.AddHttpClient("LLMConnect")
+            .AddResilienceHandler("LLMRetryPipeline", builder =>
+            {
+                builder.AddRetry(new HttpRetryStrategyOptions
+                {
+                    MaxRetryAttempts = 3,
+                    Delay = TimeSpan.FromSeconds(1),
+                    BackoffType = DelayBackoffType.Exponential,
+                    UseJitter = true,
+                    ShouldHandle = args =>
+                    {
+                        var statusCode = args.Outcome.Result?.StatusCode;
+                        return ValueTask.FromResult(
+                            statusCode >= System.Net.HttpStatusCode.InternalServerError ||
+                            statusCode == System.Net.HttpStatusCode.TooManyRequests ||
+                            args.Outcome.Exception is HttpRequestException);
+                    }
+                });
+
+                builder.AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
+                {
+                    SamplingDuration = TimeSpan.FromSeconds(30),
+                    FailureRatio = 0.5,
+                    MinimumThroughput = 5,
+                    ShouldHandle = args => ValueTask.FromResult(true)
+                });
+
+                builder.AddRateLimiter(new SlidingWindowRateLimiter(
+                    new SlidingWindowRateLimiterOptions
+                    {
+                        PermitLimit = 100,
+                        Window = TimeSpan.FromSeconds(60),
+                        SegmentsPerWindow = 6
+                    }));
+
+                configureResilience?.Invoke(builder);
+            });
+
         services.AddSingleton<ILLMClient>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<LLMClientOptions>>().Value;
-            var factory = sp.GetRequiredService<ILLMProviderFactory>();
-            return new LLMClient(options, factory);
-        });
+            var factory = sp.GetRequiredService<IHttpClientFactory>();
 
-        return services;
-    }
-
-    // 👇 Even simpler: user provides just provider and API key
-    public static IServiceCollection AddLLMConnect(
-        this IServiceCollection services,
-        ProviderType provider,
-        string apiKey)
-    {
-        services.Configure<LLMClientOptions>(options =>
-        {
-            options.Provider = provider;
-            options.ApiKey = apiKey;
-        });
-
-        services.AddHttpClient("LLMConnect");
-        services.AddSingleton<ILLMProviderFactory, LLMProviderFactory>();
-        services.AddSingleton<ILLMClient>(sp =>
-        {
-            var options = sp.GetRequiredService<IOptions<LLMClientOptions>>().Value;
-            var factory = sp.GetRequiredService<ILLMProviderFactory>();
-            return new LLMClient(options, factory);
-        });
-
-        return services;
-    }
-
-    // 👇 Advanced: user provides provider, API key, and custom endpoint
-    public static IServiceCollection AddLLMConnect(
-        this IServiceCollection services,
-        ProviderType provider,
-        string apiKey,
-        string endpoint)
-    {
-        services.Configure<LLMClientOptions>(options =>
-        {
-            options.Provider = provider;
-            options.ApiKey = apiKey;
-            options.Endpoint = endpoint;
-        });
-
-        services.AddHttpClient("LLMConnect");
-        services.AddSingleton<ILLMProviderFactory, LLMProviderFactory>();
-        services.AddSingleton<ILLMClient>(sp =>
-        {
-            var options = sp.GetRequiredService<IOptions<LLMClientOptions>>().Value;
-            var factory = sp.GetRequiredService<ILLMProviderFactory>();
             return new LLMClient(options, factory);
         });
 
