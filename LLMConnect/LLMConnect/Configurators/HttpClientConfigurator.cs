@@ -1,0 +1,73 @@
+﻿using LLMConnect.Models;
+using LLMConnect.Settings;
+using System.Net.Http.Headers;
+
+namespace LLMConnect.Internal;
+
+internal static class HttpClientConfigurator
+{
+    public static HttpClient ConfigureForProvider(LLMClientOptions options, HttpClient client)
+    {
+        // Resolve the endpoint (including placeholders)
+        var endpoint = ResolveEndpoint(options);
+
+        client.BaseAddress = new Uri(endpoint);
+        client.Timeout = options.Timeout;
+
+        client.DefaultRequestHeaders.Clear();
+
+        switch (options.Provider)
+        {
+            case ProviderType.OpenAI:
+                client.DefaultRequestHeaders.Add("Authorization", $"Bearer {options.ApiKey}");
+                client.DefaultRequestHeaders.Add("Accept", "application/json");
+                break;
+
+            case ProviderType.Anthropic:
+                client.DefaultRequestHeaders.Add("x-api-key", options.ApiKey);
+                client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
+                client.DefaultRequestHeaders.Add("Accept", "application/json");
+                break;
+
+            case ProviderType.Google:
+                client.DefaultRequestHeaders.Add("Accept", "application/json");
+                break;
+
+            case ProviderType.Ollama: // No authentication required
+                break;
+
+            default:
+                throw new NotSupportedException($"Provider '{options.Provider}' is not supported.");
+        }
+
+        if (!client.DefaultRequestHeaders.UserAgent.Any())
+        {
+            client.DefaultRequestHeaders.UserAgent.Add(
+                new ProductInfoHeaderValue("LLMConnect", "1.0.0"));
+        }
+
+        return client;
+    }
+
+    private static string ResolveEndpoint(LLMClientOptions options)
+    {
+        if (!string.IsNullOrWhiteSpace(options.Endpoint))
+            return options.Endpoint;
+
+        var endpoint = EndpointRegistry.GetDefaultEndpoint(options.Provider);
+
+        switch (options.Provider)
+        {
+            case ProviderType.Google:
+                endpoint = endpoint.Replace("{key}", options.ApiKey);
+                break;
+
+            case ProviderType.Ollama:
+                var port = options.OllamaPort?.ToString() ?? "11434";
+                endpoint = endpoint.Replace("{port}", port);
+                break;
+        }
+
+        return endpoint;
+    }
+}
