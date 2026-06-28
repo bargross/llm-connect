@@ -10,7 +10,7 @@ internal class AnthropicProvider(HttpClient httpClient, LLMClientOptions options
 {
     public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
-        var anthropicRequest = request.ToAnthropicRequest(options.DefaultModel);
+        var anthropicRequest = request.ToAnthropicRequest(options.InternalComputedDefaultModel);
 
         var json = JsonSerializer.Serialize(anthropicRequest);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -36,7 +36,7 @@ internal class AnthropicProvider(HttpClient httpClient, LLMClientOptions options
 
     public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
-        var anthropicRequest = request.ToAnthropicRequest(options.DefaultModel);
+        var anthropicRequest = request.ToAnthropicRequest(options.InternalComputedDefaultModel);
 
         anthropicRequest.Stream = true;
 

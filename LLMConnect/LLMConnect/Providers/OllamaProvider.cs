@@ -10,8 +10,9 @@ internal class OllamaProvider(HttpClient httpClient, LLMClientOptions options) :
 {
     public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
-        var ollamaRequest = request.ToOllamaRequest(options.DefaultModel);
+        var ollamaRequest = request.ToOllamaRequest(options.InternalComputedDefaultModel);
         var json = JsonSerializer.Serialize(ollamaRequest);
+
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         var response = await httpClient.PostAsync("", content, cancellationToken);
@@ -30,7 +31,7 @@ internal class OllamaProvider(HttpClient httpClient, LLMClientOptions options) :
 
     public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
-        var ollamaRequest = request.ToOllamaRequest(options.DefaultModel);
+        var ollamaRequest = request.ToOllamaRequest(options.InternalComputedDefaultModel);
 
         ollamaRequest.Stream = true;
 

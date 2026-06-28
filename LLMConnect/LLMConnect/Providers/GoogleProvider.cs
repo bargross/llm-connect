@@ -10,7 +10,7 @@ internal class GoogleProvider(HttpClient httpClient, LLMClientOptions options) :
 {
     public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
-        var model = request.Model ?? options.DefaultModel ?? "gemini-2.0-flash";
+        var model = request.Model ?? options.InternalComputedDefaultModel;
         var endpoint = httpClient.BaseAddress.ToString().Replace("{model}", model);
 
         var googleRequest = request.ToGoogleRequest();
@@ -35,7 +35,7 @@ internal class GoogleProvider(HttpClient httpClient, LLMClientOptions options) :
 
     public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
-        var model = request.Model ?? options.DefaultModel ?? "gemini-2.0-flash";
+        var model = request.Model ?? options.InternalComputedDefaultModel;
         var baseEndpoint = httpClient.BaseAddress.ToString();
         var endpoint = baseEndpoint
             .Replace("{model}", model)

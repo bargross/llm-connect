@@ -11,7 +11,7 @@ internal class OpenAIProvider(HttpClient httpClient, LLMClientOptions options) :
 {
     public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
-        var openAiRequest = request.ToOpenAIRequest(options.DefaultModel);
+        var openAiRequest = request.ToOpenAIRequest(options.InternalComputedDefaultModel);
         var json = JsonSerializer.Serialize(openAiRequest, new JsonSerializerOptions
         {
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
@@ -25,6 +25,7 @@ internal class OpenAIProvider(HttpClient httpClient, LLMClientOptions options) :
         {
             var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
             var error = JsonSerializer.Deserialize<OpenAIErrorResponse>(errorJson);
+
             throw new LLMConnectException("OpenAI", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
         }
 
@@ -39,7 +40,7 @@ internal class OpenAIProvider(HttpClient httpClient, LLMClientOptions options) :
 
     public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
-        var openAiRequest = request.ToOpenAIRequest(options.DefaultModel);
+        var openAiRequest = request.ToOpenAIRequest(options.InternalComputedDefaultModel);
 
         openAiRequest.Stream = true;
 

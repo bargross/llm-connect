@@ -29,7 +29,7 @@ internal static class ChatRequestBuilderExtensions
                 messages.Add(new OpenAIMessage { Role = msg.Role, Content = msg.Content });
         }
 
-        var model = request.Model ?? defaultModel ?? "gpt-3.5-turbo"; 
+        var model = request.Model ?? defaultModel; 
 
         var openAiRequest = new OpenAIChatRequest
         {
@@ -69,7 +69,7 @@ internal static class ChatRequestBuilderExtensions
                 messages.Add(new AnthropicMessage { Role = role, Content = msg.Content });
         }
 
-        var model = request.Model ?? defaultModel ?? "claude-3-5-sonnet-20241022";
+        var model = request.Model ?? defaultModel;
 
         return new AnthropicChatRequest
         {
@@ -90,7 +90,7 @@ internal static class ChatRequestBuilderExtensions
         var contents = new List<GoogleContent>();
         GoogleContent? systemContent = null;
 
-        if (!string.IsNullOrEmpty(request.SystemPrompt))
+        if (!string.IsNullOrWhiteSpace(request.SystemPrompt))
         {
             systemContent = new GoogleContent
             {
@@ -132,7 +132,7 @@ internal static class ChatRequestBuilderExtensions
     }
 
     // ---------- Ollama ----------
-    internal static OllamaChatRequest ToOllamaRequest(this ChatRequest request, string? defaultModel = null)
+    internal static OllamaChatRequest ToOllamaRequest(this ChatRequest request, string defaultModel)
     {
         var messages = new List<OllamaMessage>();
         if (!string.IsNullOrWhiteSpace(request.SystemPrompt))
@@ -141,7 +141,7 @@ internal static class ChatRequestBuilderExtensions
         foreach (var msg in request.Messages)
             messages.Add(new OllamaMessage { Role = msg.Role, Content = msg.Content });
 
-        var model = request.Model ?? defaultModel ?? "llama3.2";
+        var model = request.Model ?? defaultModel;
 
         return new OllamaChatRequest
         {
