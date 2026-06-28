@@ -2,7 +2,7 @@
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 
-namespace LLMConnect;
+namespace LLMConnect.Validators.Options;
 
 internal abstract class LLMConnectOptionsValidationBase
 {

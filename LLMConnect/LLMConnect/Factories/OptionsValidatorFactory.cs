@@ -1,10 +1,9 @@
-﻿using LLMConnect;
-using LLMConnect.Models;
+﻿using LLMConnect.Models;
 using LLMConnect.Validators.Options;
 
 internal static class OptionsValidatorFactory
 {
-    public static ILLMProviderOptionsValidator Create(ProviderType provider)
+    public static IOptionsValidator Create(ProviderType provider)
     {
         return provider switch
         {
