@@ -28,9 +28,6 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
 
         if (!response.IsSuccessStatusCode)
         {
-            var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
-            var error = JsonSerializer.Deserialize<GoogleErrorResponse>(errorJson);
-
             var errorMessage = await ExtractErrorMessage(response, cancellationToken);
             var exception = new LLMConnectException("Google", errorMessage);
             
@@ -86,14 +83,14 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
 
         string? line;
         var counter = 1;
-        var streamEnded = false;
-        while (streamEnded)
+        var streaming = true;
+        while (streaming)
         {
             try
             {
 
                 line = await reader.ReadLineAsync(cancellationToken);
-                streamEnded = line != null;
+                streaming = line != null;
 
             }
             catch (OperationCanceledException)

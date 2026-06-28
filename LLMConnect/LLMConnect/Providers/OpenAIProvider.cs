@@ -90,14 +90,14 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions opt
         string? line;
         var count = 1;
 
-        var streamEnded = false;
-        while (streamEnded)
+        var streaming = true;
+        while (streaming)
         {
             try
             {
 
                 line = await reader.ReadLineAsync(cancellationToken);
-                streamEnded = line != null;
+                streaming = line != null;
 
             }
             catch (OperationCanceledException)

@@ -75,14 +75,14 @@ internal class OllamaProvider(HttpClient httpClient, LLMConnectClientOptions opt
 
         string? line;
         var counter = 1;
-        var streamEnded = false;
-        while (streamEnded)
+        var streaming = true;
+        while (streaming)
         {
             try
             {
 
                 line = await reader.ReadLineAsync(cancellationToken);
-                streamEnded = line != null;
+                streaming = line != null;
 
             }
             catch (OperationCanceledException)

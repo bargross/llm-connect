@@ -79,15 +79,14 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions 
         string? currentEvent = null;
         string? line;
         var counter = 1;
-        var streamEnded = false;
-        while (streamEnded)
+        var streaming = true;
+        while (streaming)
         {
             try
             {
 
                 line = await reader.ReadLineAsync(cancellationToken);
-                streamEnded = line != null;
-
+                streaming = line != null;
             }
             catch (OperationCanceledException)
             {
@@ -96,7 +95,6 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions 
                 break; // let the caller handle this on its own
             }
 
-            if (streamEnded) break;
             if (string.IsNullOrWhiteSpace(line))
             {
                 if (_logger != null) _logger.LogInformation($"Anthropic stream Line {counter} is empty, ignoring...");
