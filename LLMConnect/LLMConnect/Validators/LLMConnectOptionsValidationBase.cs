@@ -40,7 +40,7 @@ internal abstract class LLMConnectOptionsValidationBase
             uri.Host != "localhost" &&
             uri.Host != "127.0.0.1")
         {
-            throw new ArgumentException($"Endpoint must use HTTPS for provider '{options.Provider}'.", nameof(options.Endpoint));
+            throw new ArgumentException($"Endpoint must use HTTPS for provider '{options.Provider.ToString()}'.", nameof(options.Endpoint));
         }
     }
 

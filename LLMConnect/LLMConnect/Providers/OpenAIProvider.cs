@@ -11,7 +11,7 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions opt
 {
     public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
-        var openAiRequest = request.ToOpenAIRequest(options.InternalComputedDefaultModel);
+        var openAiRequest = request.ToOpenAIRequest(options.InternalComputedDefaultModel());
         var json = JsonSerializer.Serialize(openAiRequest, new JsonSerializerOptions
         {
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
@@ -40,7 +40,7 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions opt
 
     public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
-        var openAiRequest = request.ToOpenAIRequest(options.InternalComputedDefaultModel);
+        var openAiRequest = request.ToOpenAIRequest(options.InternalComputedDefaultModel());
 
         openAiRequest.Stream = true;
 

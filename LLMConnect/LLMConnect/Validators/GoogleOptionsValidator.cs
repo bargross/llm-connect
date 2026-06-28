@@ -1,5 +1,4 @@
-﻿using LLMConnect.Models;
-using LLMConnect.Settings;
+﻿using LLMConnect.Settings;
 
 namespace LLMConnect;
 
