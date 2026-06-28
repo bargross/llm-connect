@@ -1,6 +1,6 @@
 ﻿using System.Text.Json;
 
-namespace LLMConnect.Providers
+namespace LLMConnect
 {
     internal abstract class ProviderBase
     {

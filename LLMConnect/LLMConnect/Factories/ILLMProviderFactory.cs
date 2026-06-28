@@ -1,6 +1,4 @@
-﻿using LLMConnect.Settings;
-
-namespace LLMConnect;
+﻿namespace LLMConnect;
 
 internal interface ILLMProviderFactory
 {

@@ -1,6 +1,6 @@
 ﻿using LLMConnect.Models;
 
-namespace LLMConnect.Factories
+namespace LLMConnect
 {
     internal static class ChatRequestValidatorFactory
     {
