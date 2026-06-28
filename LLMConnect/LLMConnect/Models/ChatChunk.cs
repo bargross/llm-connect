@@ -1,7 +1,17 @@
 ﻿namespace LLMConnect.Models;
 
+/// <summary>
+/// 
+/// </summary>
 public class ChatChunk
 {
-    public string Content { get; set; }
+    /// <summary>
+    /// 
+    /// </summary>
+    public string? Content { get; set; }
+
+    /// <summary>
+    /// 
+    /// </summary>
     public bool IsComplete { get; set; }
 }

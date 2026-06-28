@@ -1,14 +1,16 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿namespace LLMConnect.Models;
 
-namespace LLMConnect.Models;
-
+/// <summary>
+/// 
+/// </summary>
 public class UserMessage : Message 
 { 
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="content"></param>
     public UserMessage(string content) 
+        : base("user", content) 
     { 
-        Role = "user"; 
-        Content = content; 
     } 
 }

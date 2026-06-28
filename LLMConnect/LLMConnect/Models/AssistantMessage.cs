@@ -1,10 +1,16 @@
 ﻿namespace LLMConnect.Models;
 
+/// <summary>
+/// 
+/// </summary>
 public class AssistantMessage : Message 
 { 
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="content"></param>
     public AssistantMessage(string content) 
+        : base("assistant", content) 
     { 
-        Role = "assistant"; 
-        Content = content; 
     } 
 }
