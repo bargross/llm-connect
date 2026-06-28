@@ -8,7 +8,7 @@ public abstract class Message
     /// 
     /// </summary>
     [JsonPropertyName("role")]
-    public string Role { get; protected set; }
+    public MessageRole Role { get; protected set; }
 
     /// <summary>
     /// 
@@ -22,7 +22,7 @@ public abstract class Message
     /// <param name="role"></param>
     /// <param name="content"></param>
     [JsonConstructor] 
-    public Message(string role, string content)
+    public Message(MessageRole role, string content)
     {
         Role = role;
         Content = content;

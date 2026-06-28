@@ -10,7 +10,7 @@ public class UserMessage : Message
     /// </summary>
     /// <param name="content"></param>
     public UserMessage(string content) 
-        : base("user", content) 
+        : base(MessageRole.User, content) 
     { 
     } 
 }

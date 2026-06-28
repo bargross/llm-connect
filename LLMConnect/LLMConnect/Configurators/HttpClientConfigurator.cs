@@ -8,7 +8,6 @@ internal static class HttpClientConfigurator
 {
     internal static HttpClient ConfigureForProvider(LLMConnectClientOptions options, HttpClient client)
     {
-        // Resolve the endpoint (including placeholders)
         var endpoint = ResolveEndpoint(options);
 
         client.BaseAddress = new Uri(endpoint);

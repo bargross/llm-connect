@@ -1,5 +1,6 @@
 ﻿using LLMConnect.Models;
 using LLMConnect.Settings;
+using Microsoft.Extensions.Logging;
 
 namespace LLMConnect;
 
@@ -8,21 +9,26 @@ internal class LLMProviderFactory : ILLMProviderFactory
     private readonly HttpClient? _providedClient;
     private readonly LLMConnectClientOptions _options;
     private readonly IHttpClientFactory? _httpClientFactory;
+    private readonly ILogger<LLMProviderFactory>? _logger;
 
     public LLMProviderFactory(LLMConnectClientOptions options, HttpClient httpClient)
     {
         _providedClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-
-        LLMConnectOptionsValidator.Validate(options);
         _options = options ?? throw new ArgumentNullException(nameof(options));
+
+        _logger = options.LoggerFactory?.CreateLogger<LLMProviderFactory>();
+
+        LLMConnectOptionsValidator.Validate(options, _logger);
     }
 
     public LLMProviderFactory(LLMConnectClientOptions options, IHttpClientFactory httpClientFactory)
     {
         _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
-
-        LLMConnectOptionsValidator.Validate(options);
         _options = options ?? throw new ArgumentNullException(nameof(options));
+
+        _logger = options.LoggerFactory?.CreateLogger<LLMProviderFactory>();
+
+        LLMConnectOptionsValidator.Validate(options, _logger);
     }
 
     public ILLMProvider CreateProvider()
@@ -44,17 +50,12 @@ internal class LLMProviderFactory : ILLMProviderFactory
         HttpClient client;
 
         if (_providedClient != null)
-        {
             client = _providedClient;
-        }
+        
         else if (_httpClientFactory != null)
-        {
             client = _httpClientFactory.CreateClient("LLMConnect");
-        }
-        else
-        {
-            client = new HttpClient();
-        }
+        
+        else client = new HttpClient();
 
         return HttpClientConfigurator.ConfigureForProvider(options, client);
     }

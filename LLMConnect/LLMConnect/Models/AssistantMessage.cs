@@ -10,7 +10,7 @@ public class AssistantMessage : Message
     /// </summary>
     /// <param name="content"></param>
     public AssistantMessage(string content) 
-        : base("assistant", content) 
+        : base(MessageRole.Assistant, content) 
     { 
     } 
 }

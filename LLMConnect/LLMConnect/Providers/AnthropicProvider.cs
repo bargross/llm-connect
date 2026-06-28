@@ -1,6 +1,7 @@
 ﻿using LLMConnect.Exceptions;
 using LLMConnect.Models;
 using LLMConnect.Settings;
+using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
 
@@ -8,6 +9,8 @@ namespace LLMConnect;
 
 internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions options) : ILLMProvider
 {
+    private readonly ILogger<AnthropicProvider>? _logger = options.LoggerFactory?.CreateLogger<AnthropicProvider>();
+
     public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
         var anthropicRequest = request.ToAnthropicRequest(options.InternalComputedDefaultModel());
@@ -22,7 +25,11 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions 
             var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
             var error = JsonSerializer.Deserialize<AnthropicErrorResponse>(errorJson);
 
-            throw new LLMConnectException("Anthropic", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
+            var exception = new LLMConnectException("Anthropic", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
+
+            if (_logger != null) _logger.LogError(exception.Provider, exception.Message, exception);
+
+            throw exception;
         }
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -50,7 +57,11 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions 
             var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
             var error = JsonSerializer.Deserialize<AnthropicErrorResponse>(errorJson);
 
-            throw new LLMConnectException("Anthropic", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
+            var exception = new LLMConnectException("Anthropic", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
+
+            if (_logger != null) _logger.LogError(exception.Provider, exception.Message, exception);
+
+            throw exception;
         }
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -58,10 +69,15 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions 
 
         string? currentEvent = null;
         string? line;
+        var counter = 1;
         while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
         {
-            if (string.IsNullOrEmpty(line))
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                if (_logger != null) _logger.LogInformation("Anthropic", $"Stream Line {counter} is empty, ignoring...");
+
                 continue;
+            }
 
             if (line.StartsWith("event: ", StringComparison.OrdinalIgnoreCase))
             {
@@ -84,12 +100,14 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions 
                     {
                         delta = JsonSerializer.Deserialize<AnthropicContentBlockDelta>(data);
                     }
-                    catch (JsonException)
+                    catch (JsonException ex)
                     {
+                        if (_logger != null) _logger.LogError("Anthropic", $"Error deserializing response due to: {ex.Message}", ex);
+
                         continue;
                     }
 
-                    if (delta?.Delta?.Text is string textChunk && !string.IsNullOrEmpty(textChunk))
+                    if (delta?.Delta?.Text is string textChunk && !string.IsNullOrWhiteSpace(textChunk))
                     {
                         yield return new ChatChunk
                         {

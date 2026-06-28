@@ -1,6 +1,7 @@
 ﻿using LLMConnect.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly;
 using System.Threading.RateLimiting;
@@ -71,6 +72,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ILLMConnectClient>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
+
+            options.LoggerFactory = sp.GetService<ILoggerFactory>();
+
             var factory = sp.GetRequiredService<IHttpClientFactory>();
 
             return new LLMConnectClient(options, factory);

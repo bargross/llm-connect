@@ -16,7 +16,7 @@ public class ToolMessage : Message
     /// <param name="toolCallId"></param>
     /// <param name="content"></param>
     public ToolMessage(string toolCallId, string content) 
-        : base("tool", content) 
+        : base(MessageRole.Tool, content) 
     { 
         ToolCallId = toolCallId; 
     } 

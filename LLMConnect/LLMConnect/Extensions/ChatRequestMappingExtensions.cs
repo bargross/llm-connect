@@ -9,24 +9,28 @@ internal static class ChatRequestBuilderExtensions
     {
         var messages = new List<OpenAIMessage>();
 
-        if (!string.IsNullOrEmpty(request.SystemPrompt))
+        if (!string.IsNullOrWhiteSpace(request.SystemPrompt))
         {
-            messages.Add(new OpenAIMessage { Role = "system", Content = request.SystemPrompt });
+            messages.Add(new OpenAIMessage { Role = MessageRole.System.ToString().ToLower(), Content = request.SystemPrompt });
         }
 
         foreach (var msg in request.Messages)
         {
-            if (msg is SystemMessage systemMsg)
-                messages.Add(new OpenAIMessage { Role = "system", Content = systemMsg.Content });
-
-            else if (msg is UserMessage userMsg)
-                messages.Add(new OpenAIMessage { Role = "user", Content = userMsg.Content });
-
-            else if (msg is AssistantMessage assistantMsg)
-                messages.Add(new OpenAIMessage { Role = "assistant", Content = assistantMsg.Content });
-
-            else
-                messages.Add(new OpenAIMessage { Role = msg.Role, Content = msg.Content });
+            switch(msg.Role)
+            {
+                case MessageRole.Assistant:
+                    messages.Add(new OpenAIMessage { Role = "assistant", Content = msg.Content });
+                    break;
+                case MessageRole.System:
+                    messages.Add(new OpenAIMessage { Role = "system", Content = msg.Content });
+                    break;
+                case MessageRole.User:
+                    messages.Add(new OpenAIMessage { Role = "user", Content = msg.Content });
+                    break;
+                default:
+                    messages.Add(new OpenAIMessage { Role = MapToOpenAIRole(msg.Role), Content = msg.Content });
+                    break;
+            }
         }
 
         var model = request.Model ?? defaultModel; 
@@ -53,19 +57,14 @@ internal static class ChatRequestBuilderExtensions
         return openAiRequest;
     }
 
-    // ---------- Anthropic ----------
     internal static AnthropicChatRequest ToAnthropicRequest(this ChatRequest request, string? defaultModel = null)
     {
         var messages = new List<AnthropicMessage>();
         foreach (var msg in request.Messages)
         {
-            string role = msg.Role switch
-            {
-                "system" => "user",     // System prompts are handled separately
-                "assistant" => "assistant",
-                _ => "user"
-            };
-            if (msg.Role != "system")
+            var role = MapToAnthropicRole(msg.Role);
+
+            if (msg.Role != MessageRole.System)
                 messages.Add(new AnthropicMessage { Role = role, Content = msg.Content });
         }
 
@@ -84,7 +83,6 @@ internal static class ChatRequestBuilderExtensions
         };
     }
 
-    // ---------- Google ----------
     internal static GoogleChatRequest ToGoogleRequest(this ChatRequest request, string? defaultModel = null)
     {
         var contents = new List<GoogleContent>();
@@ -101,16 +99,9 @@ internal static class ChatRequestBuilderExtensions
 
         foreach (var msg in request.Messages)
         {
-            var role = msg.Role switch
-            {
-                "user" => "user",
-                "assistant" => "model",
-                "system" => "system",
-                _ => "user"
-            };
             contents.Add(new GoogleContent
             {
-                Role = role,
+                Role = MapToGoogleRole(msg.Role),
                 Parts = new List<GooglePart> { new GooglePart { Text = msg.Content } }
             });
         }
@@ -131,7 +122,6 @@ internal static class ChatRequestBuilderExtensions
         };
     }
 
-    // ---------- Ollama ----------
     internal static OllamaChatRequest ToOllamaRequest(this ChatRequest request, string defaultModel)
     {
         var messages = new List<OllamaMessage>();
@@ -139,7 +129,7 @@ internal static class ChatRequestBuilderExtensions
             messages.Add(new OllamaMessage { Role = "system", Content = request.SystemPrompt });
 
         foreach (var msg in request.Messages)
-            messages.Add(new OllamaMessage { Role = msg.Role, Content = msg.Content });
+            messages.Add(new OllamaMessage { Role = MapToOllamaRole(msg.Role), Content = msg.Content });
 
         var model = request.Model ?? defaultModel;
 
@@ -159,4 +149,40 @@ internal static class ChatRequestBuilderExtensions
             }
         };
     }
+
+    internal static string MapToOpenAIRole(MessageRole role) => role switch
+    {
+        MessageRole.System => "system",
+        MessageRole.User => "user",
+        MessageRole.Assistant => "assistant",
+        MessageRole.Tool => "tool",
+        _ => throw new ArgumentOutOfRangeException(nameof(role), role, null)
+    };
+
+    internal static string MapToAnthropicRole(MessageRole role) => role switch
+    {
+        MessageRole.System => "user",     // System prompts are a top-level property
+        MessageRole.User => "user",
+        MessageRole.Assistant => "assistant",
+        MessageRole.Tool => "user",       // Tool messages are not natively supported
+        _ => throw new ArgumentOutOfRangeException(nameof(role), role, null)
+    };
+
+    internal static string MapToGoogleRole(MessageRole role) => role switch
+    {
+        MessageRole.System => "system",
+        MessageRole.User => "user",
+        MessageRole.Assistant => "model",
+        MessageRole.Tool => "user",       // Not natively supported
+        _ => throw new ArgumentOutOfRangeException(nameof(role), role, null)
+    };
+
+    internal static string MapToOllamaRole(MessageRole role) => role switch
+    {
+        MessageRole.System => "system",
+        MessageRole.User => "user",
+        MessageRole.Assistant => "assistant",
+        MessageRole.Tool => "tool",
+        _ => throw new ArgumentOutOfRangeException(nameof(role), role, null)
+    };
 }

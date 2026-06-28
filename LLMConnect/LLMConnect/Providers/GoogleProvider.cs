@@ -1,6 +1,7 @@
 ﻿using LLMConnect.Exceptions;
 using LLMConnect.Models;
 using LLMConnect.Settings;
+using Microsoft.Extensions.Logging;
 using System.Text;
 using System.Text.Json;
 
@@ -8,6 +9,8 @@ namespace LLMConnect;
 
 internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions options) : ILLMProvider
 {
+    private readonly ILogger<GoogleProvider>? _logger = options.LoggerFactory?.CreateLogger<GoogleProvider>();
+
     public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
         var model = request.Model ?? options.InternalComputedDefaultModel();
@@ -23,8 +26,12 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
         {
             var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
             var error = JsonSerializer.Deserialize<GoogleErrorResponse>(errorJson);
+
+            var exception = new LLMConnectException("Google", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
             
-            throw new LLMConnectException("Google", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
+            if (_logger != null) _logger.LogError(exception.Provider, exception.Message, exception);
+
+            throw exception;
         }
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -52,17 +59,29 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
         {
             var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
             var error = JsonSerializer.Deserialize<GoogleErrorResponse>(errorJson);
-            throw new LLMConnectException("Google", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
+
+            var exception = new LLMConnectException("Google", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
+
+            if (_logger != null) _logger.LogError(exception.Provider, exception.Message, exception);
+
+            throw exception;
         }
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream);
 
         string? line;
+        var counter = 1;
         while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
         {
             if (string.IsNullOrWhiteSpace(line))
+            {
+                if (_logger != null) _logger.LogInformation("Google", $"Stream Line {counter} is empty, ignoring...");
+
                 continue;
+            }
+
+            counter++;
 
             if (!line.StartsWith("data: ", StringComparison.OrdinalIgnoreCase))
                 continue;
@@ -76,12 +95,14 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
             {
                 chunk = JsonSerializer.Deserialize<GoogleChatResponse>(data);
             }
-            catch (JsonException)
+            catch (JsonException ex)
             {
+                if (_logger != null) _logger.LogError("Google", $"Error deserializing response due to: {ex.Message}", ex);
+
                 continue;
             }
 
-            if (chunk?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text is string contentChunk && !string.IsNullOrEmpty(contentChunk))
+            if (chunk?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text is string contentChunk && !string.IsNullOrWhiteSpace(contentChunk))
             {
                 yield return new ChatChunk
                 {

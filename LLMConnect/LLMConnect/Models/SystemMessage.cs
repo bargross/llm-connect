@@ -10,7 +10,7 @@ public class SystemMessage : Message
     /// </summary>
     /// <param name="content"></param>
     public SystemMessage(string content) 
-        : base("system", content) 
+        : base(MessageRole.System, content) 
     { 
     } 
 }
