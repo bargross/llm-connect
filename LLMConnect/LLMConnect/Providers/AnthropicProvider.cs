@@ -2,6 +2,7 @@
 using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 
@@ -11,7 +12,7 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions 
 {
     private readonly ILogger<AnthropicProvider>? _logger = options.LoggerFactory?.CreateLogger<AnthropicProvider>();
 
-    public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
+    public async Task<ChatResponse?> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
         var anthropicRequest = request.ToAnthropicRequest(options.InternalComputedDefaultModel());
 
@@ -41,7 +42,7 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions 
         return anthropicResponse.ToChatResponse();
     }
 
-    public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, [EnumeratorCancellation]  CancellationToken cancellationToken = default)
     {
         var anthropicRequest = request.ToAnthropicRequest(options.InternalComputedDefaultModel());
 
@@ -74,7 +75,7 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions 
         {
             if (string.IsNullOrWhiteSpace(line))
             {
-                if (_logger != null) _logger.LogInformation("Anthropic", $"Stream Line {counter} is empty, ignoring...");
+                if (_logger != null) _logger.LogInformation($"Anthropic stream Line {counter} is empty, ignoring...");
 
                 continue;
             }
@@ -102,7 +103,7 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions 
                     }
                     catch (JsonException ex)
                     {
-                        if (_logger != null) _logger.LogError("Anthropic", $"Error deserializing response due to: {ex.Message}", ex);
+                        if (_logger != null) _logger.LogError($"Anthropic stream error deserializing response due to: {ex.Message}", ex);
 
                         continue;
                     }

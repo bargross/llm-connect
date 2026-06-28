@@ -2,6 +2,7 @@
 using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -12,7 +13,7 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions opt
 {
     private readonly ILogger<OpenAIProvider>? _logger = options.LoggerFactory?.CreateLogger<OpenAIProvider>();
 
-    public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
+    public async Task<ChatResponse?> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
         var openAiRequest = request.ToOpenAIRequest(options.InternalComputedDefaultModel());
         var json = JsonSerializer.Serialize(openAiRequest, new JsonSerializerOptions
@@ -29,7 +30,7 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions opt
             var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
             var error = JsonSerializer.Deserialize<OpenAIErrorResponse>(errorJson);
 
-            if (_logger != null) _logger.LogError(error.Error.Message, error);
+            if (_logger != null) _logger.LogError(error?.Error?.Message, error);
 
             throw new LLMConnectException("OpenAI", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
         }
@@ -49,7 +50,7 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions opt
         return openAiResponse.ToChatResponse();
     }
 
-    public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var openAiRequest = request.ToOpenAIRequest(options.InternalComputedDefaultModel());
 
@@ -85,7 +86,7 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions opt
         {
             if (string.IsNullOrWhiteSpace(line))
             {
-                if (_logger != null) _logger.LogInformation($"Line number {count} is empty, ignoring...");
+                if (_logger != null) _logger.LogInformation($"OpenAI stream Line number {count} is empty, ignoring...");
 
                 continue;
             }
@@ -105,7 +106,7 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions opt
                 }
                 catch (JsonException ex)
                 {
-                    if (_logger != null) _logger.LogError("OpenAI", $"Error deserializing response due to: {ex.Message}", ex);
+                    if (_logger != null) _logger.LogError($"OpenAI stream errored deserializing response due to: {ex.Message}", ex);
                     continue;
                 }
 

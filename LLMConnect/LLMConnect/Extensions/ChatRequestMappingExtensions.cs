@@ -37,7 +37,7 @@ internal static class ChatRequestBuilderExtensions
 
         var openAiRequest = new OpenAIChatRequest
         {
-            Model = model,
+            Model = model ?? string.Empty,
             Messages = messages,
             Temperature = request.Temperature != 0.0f ? request.Temperature : null,
             TopP = request.TopP != 0.0f ? request.TopP : null,

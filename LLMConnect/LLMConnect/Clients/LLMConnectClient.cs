@@ -51,7 +51,7 @@ public class LLMConnectClient : ILLMConnectClient
     /// <param name="request"></param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
+    public async Task<ChatResponse?> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
         return await _provider.ChatAsync(request, cancellationToken);
     }

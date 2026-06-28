@@ -2,6 +2,7 @@
 using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 
@@ -11,10 +12,10 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
 {
     private readonly ILogger<GoogleProvider>? _logger = options.LoggerFactory?.CreateLogger<GoogleProvider>();
 
-    public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
+    public async Task<ChatResponse?> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
         var model = request.Model ?? options.InternalComputedDefaultModel();
-        var endpoint = httpClient.BaseAddress.ToString().Replace("{model}", model);
+        var endpoint = httpClient.BaseAddress?.ToString().Replace("{model}", model);
 
         var googleRequest = request.ToGoogleRequest();
         var json = JsonSerializer.Serialize(googleRequest);
@@ -37,14 +38,14 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
         var googleResponse = JsonSerializer.Deserialize<GoogleChatResponse>(responseJson);
 
-        return googleResponse.ToChatResponse();
+        return googleResponse?.ToChatResponse();
     }
 
-    public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var model = request.Model ?? options.InternalComputedDefaultModel();
-        var baseEndpoint = httpClient.BaseAddress.ToString();
-        var endpoint = baseEndpoint
+        var baseEndpoint = httpClient.BaseAddress?.ToString();
+        var endpoint = baseEndpoint?
             .Replace("{model}", model)
             .Replace("generateContent", "streamGenerateContent");
 
@@ -76,7 +77,7 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
         {
             if (string.IsNullOrWhiteSpace(line))
             {
-                if (_logger != null) _logger.LogInformation("Google", $"Stream Line {counter} is empty, ignoring...");
+                if (_logger != null) _logger.LogInformation($"Google stream Line {counter} is empty, ignoring...");
 
                 continue;
             }
@@ -97,7 +98,7 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
             }
             catch (JsonException ex)
             {
-                if (_logger != null) _logger.LogError("Google", $"Error deserializing response due to: {ex.Message}", ex);
+                if (_logger != null) _logger.LogError($"Google stream error deserializing response due to: {ex.Message}", ex);
 
                 continue;
             }

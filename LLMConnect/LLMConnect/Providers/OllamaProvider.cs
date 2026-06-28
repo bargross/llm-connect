@@ -2,6 +2,7 @@
 using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 
@@ -11,7 +12,7 @@ internal class OllamaProvider(HttpClient httpClient, LLMConnectClientOptions opt
 {
     private readonly ILogger<OllamaProvider>? _logger = options.LoggerFactory?.CreateLogger<OllamaProvider>();
 
-    public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
+    public async Task<ChatResponse?> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
         var ollamaRequest = request.ToOllamaRequest(options.InternalComputedDefaultModel());
         var json = JsonSerializer.Serialize(ollamaRequest);
@@ -34,10 +35,10 @@ internal class OllamaProvider(HttpClient httpClient, LLMConnectClientOptions opt
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
         var ollamaResponse = JsonSerializer.Deserialize<OllamaChatResponse>(responseJson);
 
-        return ollamaResponse.ToChatResponse();
+        return ollamaResponse?.ToChatResponse();
     }
 
-    public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var ollamaRequest = request.ToOllamaRequest(options.InternalComputedDefaultModel());
 
@@ -67,7 +68,7 @@ internal class OllamaProvider(HttpClient httpClient, LLMConnectClientOptions opt
         {
             if (string.IsNullOrWhiteSpace(line))
             {
-                if (_logger != null) _logger.LogInformation("Ollama", $"Line {counter} is empty, ignoring....");
+                if (_logger != null) _logger.LogInformation($"Ollama stream Line {counter} is empty, ignoring....");
 
                 continue;
             }
@@ -81,7 +82,7 @@ internal class OllamaProvider(HttpClient httpClient, LLMConnectClientOptions opt
             }
             catch (JsonException ex)
             {
-                if (_logger != null) _logger.LogError("Ollama", $"Error deserializing response due to: {ex.Message}", ex);
+                if (_logger != null) _logger.LogError($"Ollama stream errored deserializing response due to: {ex.Message}", ex);
 
                 continue;
             }

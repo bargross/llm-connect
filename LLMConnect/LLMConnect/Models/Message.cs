@@ -2,6 +2,9 @@
 
 namespace LLMConnect.Models;
 
+/// <summary>
+/// 
+/// </summary>
 public abstract class Message
 {
     /// <summary>

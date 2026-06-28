@@ -8,7 +8,7 @@ public class ChatResponse
     /// <summary>
     /// 
     /// </summary>
-    public string Content { get; set; }
+    public string? Content { get; set; }
 
     /// <summary>
     /// 
