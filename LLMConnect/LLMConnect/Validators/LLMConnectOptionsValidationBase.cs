@@ -16,7 +16,7 @@ internal abstract class LLMConnectOptionsValidationBase
         if (options.Timeout <= TimeSpan.Zero)
         {
             var errorMessage = "Timeout must be greater than zero.";
-            logger.LogError(errorMessage);
+            logger?.LogError(errorMessage);
 
             throw new ArgumentException(errorMessage, nameof(options.Timeout));
         }
@@ -24,7 +24,7 @@ internal abstract class LLMConnectOptionsValidationBase
         if (options.MaxRetries < 0)
         {
             var errorMessage = $"MaxRetries must be >= 0.";
-            logger.LogError(errorMessage);
+            logger?.LogError(errorMessage);
 
             throw new ArgumentException(errorMessage, nameof(options.MaxRetries));
         }
@@ -32,17 +32,17 @@ internal abstract class LLMConnectOptionsValidationBase
         if (!string.IsNullOrWhiteSpace(options.DefaultModel) && options.DefaultModel.Length > 100)
         {
             var errorMessage = "DefaultModel cannot exceed 100 characters.";
-            logger.LogError(errorMessage);
+            logger?.LogError(errorMessage);
 
             throw new ArgumentException(errorMessage, nameof(options.DefaultModel));
         }
 
         ValidateEndpoint(options, logger);
 
-        ValidateProviderSpecific(options);
+        ValidateProviderSpecific(options, logger);
     }
 
-    protected virtual void ValidateEndpoint(LLMConnectClientOptions options, ILogger logger)
+    protected virtual void ValidateEndpoint(LLMConnectClientOptions options, ILogger? logger = null)
     {
         if (string.IsNullOrWhiteSpace(options.Endpoint))
             return;
@@ -50,7 +50,7 @@ internal abstract class LLMConnectOptionsValidationBase
         if (!Uri.IsWellFormedUriString(options.Endpoint, UriKind.Absolute))
         {
             var errorMessage = $"Invalid endpoint URL: {options.Endpoint} for provider {options.Provider.ToString()}";
-            logger.LogError(errorMessage);
+            logger?.LogError(errorMessage);
 
             throw new ArgumentException(errorMessage, nameof(options.Endpoint));
         }
@@ -62,7 +62,7 @@ internal abstract class LLMConnectOptionsValidationBase
             genericProviderEndpoint.Host != "127.0.0.1")
         {
             var errorMessage = $"Endpoint must use HTTPS for provider '{options.Provider.ToString()}'.";
-            logger.LogError(errorMessage);
+            logger?.LogError(errorMessage);
 
             throw new ArgumentException(errorMessage, nameof(options.Endpoint));
         }
@@ -74,14 +74,14 @@ internal abstract class LLMConnectOptionsValidationBase
             !openAIUri.Host.Contains("azure.com") &&
             !openAIUri.Host.Contains("localhost"))
         {
-            logger.LogWarning("OpenAI provider used with non-OpenAI endpoint.");
+            logger?.LogWarning("OpenAI provider used with non-OpenAI endpoint.");
 
             // Log a warning — but don't throw
             System.Diagnostics.Debug.WriteLine("Warning: OpenAI provider used with non-OpenAI endpoint.");
         }
     }
 
-    protected virtual void ValidateApiKey(LLMConnectClientOptions options, ILogger logger)
+    protected virtual void ValidateApiKey(LLMConnectClientOptions options, ILogger? logger = null)
     {
         switch (options.Provider)
         {
@@ -90,7 +90,7 @@ internal abstract class LLMConnectOptionsValidationBase
             case ProviderType.OpenAI:
             case ProviderType.Google:
                 var errorMessage = $"Missing api key for provider {options.Provider.ToString()}";
-                logger.LogError(errorMessage);
+                logger?.LogError(errorMessage);
 
                 if (string.IsNullOrWhiteSpace(options.ApiKey))
                     throw new ArgumentException(errorMessage);
@@ -99,5 +99,5 @@ internal abstract class LLMConnectOptionsValidationBase
         }
     }
 
-    protected abstract void ValidateProviderSpecific(LLMConnectClientOptions options);
+    protected abstract void ValidateProviderSpecific(LLMConnectClientOptions options, ILogger? logger = null);
 }

@@ -4,8 +4,10 @@ namespace LLMConnect;
 
 internal static class ChatResponseMappingExtensions
 {
-    internal static ChatResponse ToChatResponse(this OpenAIChatResponse response)
+    internal static ChatResponse? ToChatResponse(this OpenAIChatResponse response)
     {
+        if (response == null) return null;
+
         if (response?.Choices?.FirstOrDefault()?.Message is not OpenAIResponseMessage message)
         {
             return new ChatResponse
@@ -31,8 +33,10 @@ internal static class ChatResponseMappingExtensions
         };
     }
 
-    internal static ChatResponse ToChatResponse(this AnthropicChatResponse response)
+    internal static ChatResponse? ToChatResponse(this AnthropicChatResponse response)
     {
+        if (response == null) return null;
+
         var text = response.Content?.FirstOrDefault(c => c.Type == "text")?.Text ?? string.Empty;
         return new ChatResponse
         {
@@ -48,8 +52,10 @@ internal static class ChatResponseMappingExtensions
         };
     }
 
-    internal static ChatResponse ToChatResponse(this GoogleChatResponse response)
+    internal static ChatResponse? ToChatResponse(this GoogleChatResponse response)
     {
+        if (response == null) return null;
+
         var candidate = response.Candidates?.FirstOrDefault();
         var content = candidate?.Content?.Parts?.FirstOrDefault()?.Text ?? string.Empty;
         return new ChatResponse
@@ -66,8 +72,10 @@ internal static class ChatResponseMappingExtensions
         };
     }
 
-    internal static ChatResponse ToChatResponse(this OllamaChatResponse response)
+    internal static ChatResponse? ToChatResponse(this OllamaChatResponse response)
     {
+        if (response == null) return null;
+
         var content = response.Message?.Content ?? string.Empty;
         return new ChatResponse
         {

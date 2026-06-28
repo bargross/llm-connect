@@ -34,7 +34,7 @@ internal class OllamaProvider(HttpClient httpClient, LLMConnectClientOptions opt
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
         var ollamaResponse = JsonSerializer.Deserialize<OllamaChatResponse>(responseJson);
 
-        return ollamaResponse?.ToChatResponse();
+        return ollamaResponse.ToChatResponse();
     }
 
     public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default)
