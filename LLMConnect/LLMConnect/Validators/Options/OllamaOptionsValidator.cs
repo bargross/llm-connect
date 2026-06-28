@@ -2,9 +2,9 @@
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 
-namespace LLMConnect;
+namespace LLMConnect.Validators.Options;
 
-internal class OllamaOptionsValidator : LLMConnectOptionsValidationBase, ILLMProviderOptionsValidator
+internal class OllamaOptionsValidator : LLMConnectOptionsValidationBase, IOptionsValidator
 {
     protected override void ValidateProviderSpecific(LLMConnectClientOptions options, ILogger? logger = null)
     {

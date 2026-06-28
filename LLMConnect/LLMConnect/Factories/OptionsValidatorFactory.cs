@@ -1,5 +1,6 @@
 ﻿using LLMConnect;
 using LLMConnect.Models;
+using LLMConnect.Validators.Options;
 
 internal static class OptionsValidatorFactory
 {

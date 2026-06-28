@@ -1,4 +1,5 @@
 ﻿using LLMConnect.Exceptions;
+using LLMConnect.Factories;
 using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
@@ -11,9 +12,12 @@ namespace LLMConnect;
 internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions options) : ILLMProvider
 {
     private readonly ILogger<GoogleProvider>? _logger = options.LoggerFactory?.CreateLogger<GoogleProvider>();
+    private readonly IChatRequestValidator _validator = ChatRequestValidatorFactory.Create(options.Provider);
 
     public async Task<ChatResponse?> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
+        _validator.Validate(request, _logger);
+
         var model = request.Model ?? options.InternalComputedDefaultModel();
         var endpoint = httpClient.BaseAddress?.ToString().Replace("{model}", model);
 
@@ -43,6 +47,8 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
 
     public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        _validator.Validate(request, _logger);
+
         var model = request.Model ?? options.InternalComputedDefaultModel();
         var baseEndpoint = httpClient.BaseAddress?.ToString();
         var endpoint = baseEndpoint?

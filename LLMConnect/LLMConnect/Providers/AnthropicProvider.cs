@@ -1,4 +1,5 @@
 ﻿using LLMConnect.Exceptions;
+using LLMConnect.Factories;
 using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
@@ -10,10 +11,14 @@ namespace LLMConnect;
 
 internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions options) : ILLMProvider
 {
+    private readonly IChatRequestValidator _validator = ChatRequestValidatorFactory.Create(options.Provider);
+
     private readonly ILogger<AnthropicProvider>? _logger = options.LoggerFactory?.CreateLogger<AnthropicProvider>();
 
     public async Task<ChatResponse?> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
+        _validator.Validate(request, _logger);
+
         var anthropicRequest = request.ToAnthropicRequest(options.InternalComputedDefaultModel());
 
         var json = JsonSerializer.Serialize(anthropicRequest);
@@ -44,6 +49,8 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions 
 
     public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, [EnumeratorCancellation]  CancellationToken cancellationToken = default)
     {
+        _validator.Validate(request, _logger);
+
         var anthropicRequest = request.ToAnthropicRequest(options.InternalComputedDefaultModel());
 
         anthropicRequest.Stream = true;

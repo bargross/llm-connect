@@ -1,9 +1,9 @@
 ﻿using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 
-namespace LLMConnect;
+namespace LLMConnect.Validators.Options;
 
-internal interface ILLMProviderOptionsValidator
+internal interface IOptionsValidator
 {
     void Validate(LLMConnectClientOptions options, ILogger? logger = null);
 }

@@ -1,9 +1,9 @@
 ﻿using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 
-namespace LLMConnect;
+namespace LLMConnect.Validators.Options;
 
-internal class OpenAIOptionsValidator : LLMConnectOptionsValidationBase, ILLMProviderOptionsValidator
+internal class GoogleOptionsValidator : LLMConnectOptionsValidationBase, IOptionsValidator
 {
     protected override void ValidateProviderSpecific(LLMConnectClientOptions options, ILogger? logger = null) { }
 }
