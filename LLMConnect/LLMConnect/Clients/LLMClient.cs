@@ -3,6 +3,9 @@ using LLMConnect.Settings;
 
 namespace LLMConnect;
 
+/// <summary>
+/// 
+/// </summary>
 public class LLMClient : ILLMClient
 {
     private readonly ILLMProvider _provider;
@@ -37,21 +40,28 @@ public class LLMClient : ILLMClient
     {
     }
 
-    /// <summary>
-    /// No client provided (library creates its own internally)
-    /// </summary>
-    /// <param name="options">library options</param>
-    /// <param name="httpClientFactory">user defined client factory</param>
     private LLMClient(ILLMProviderFactory factory)
     {
         _provider = factory.CreateProvider();
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="request"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
     public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
         return await _provider.ChatAsync(request, cancellationToken);
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="request"></param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
     public IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
         return _provider.StreamAsync(request, cancellationToken);

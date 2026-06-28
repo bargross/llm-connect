@@ -5,7 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace LLMConnect.Providers;
+namespace LLMConnect;
 
 internal class OpenAIProvider(HttpClient httpClient, LLMClientOptions options) : ILLMProvider
 {

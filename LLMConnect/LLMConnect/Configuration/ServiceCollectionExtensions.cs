@@ -7,8 +7,19 @@ using System.Threading.RateLimiting;
 
 namespace LLMConnect.Configuration;
 
+/// <summary>
+/// 
+/// </summary>
 public static class ServiceCollectionExtensions
 {
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="services"></param>
+    /// <param name="configure"></param>
+    /// <param name="configureResilience"></param>
+    /// <returns></returns>
     public static IServiceCollection AddLLMConnect(
         this IServiceCollection services,
         Action<LLMClientOptions>? configure = null,

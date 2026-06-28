@@ -1,8 +1,7 @@
 ﻿using LLMConnect.Models;
 using LLMConnect.Settings;
-using System;
 
-namespace LLMConnect.Internal;
+namespace LLMConnect;
 
 internal static class OptionsValidator
 {

@@ -2,7 +2,7 @@
 using LLMConnect.Settings;
 using System.Net.Http.Headers;
 
-namespace LLMConnect.Internal;
+namespace LLMConnect;
 
 internal static class HttpClientConfigurator
 {

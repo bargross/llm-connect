@@ -1,5 +1,4 @@
 ﻿using LLMConnect.Models;
-using System.Text.Json;
 
 namespace LLMConnect;
 
@@ -19,15 +18,18 @@ internal static class ChatRequestBuilderExtensions
         {
             if (msg is SystemMessage systemMsg)
                 messages.Add(new OpenAIMessage { Role = "system", Content = systemMsg.Content });
+
             else if (msg is UserMessage userMsg)
                 messages.Add(new OpenAIMessage { Role = "user", Content = userMsg.Content });
+
             else if (msg is AssistantMessage assistantMsg)
                 messages.Add(new OpenAIMessage { Role = "assistant", Content = assistantMsg.Content });
+
             else
                 messages.Add(new OpenAIMessage { Role = msg.Role, Content = msg.Content });
         }
 
-        var model = request.Model ?? defaultModel ?? "gpt-3.5-turbo";
+        var model = request.Model ?? defaultModel ?? "gpt-3.5-turbo"; 
 
         var openAiRequest = new OpenAIChatRequest
         {
@@ -46,9 +48,7 @@ internal static class ChatRequestBuilderExtensions
 
         // Merge extra parameters
         if (request.ExtraParameters != null && request.ExtraParameters.Count > 0)
-        {
-            openAiRequest.ExtraData = new Dictionary<string, object>(request.ExtraParameters);
-        }
+            openAiRequest.ExtraData = new Dictionary<string, object>(request.ExtraParameters); 
 
         return openAiRequest;
     }
@@ -75,7 +75,7 @@ internal static class ChatRequestBuilderExtensions
         {
             Model = model,
             Messages = messages,
-            System = string.IsNullOrEmpty(request.SystemPrompt) ? null : request.SystemPrompt,
+            System = string.IsNullOrWhiteSpace(request.SystemPrompt) ? null : request.SystemPrompt,
             MaxTokens = request.MaxTokens > 0 ? request.MaxTokens : 1024,
             Temperature = request.Temperature != 0.0f ? request.Temperature : null,
             TopP = request.TopP != 0.0f ? request.TopP : null,
@@ -135,8 +135,9 @@ internal static class ChatRequestBuilderExtensions
     internal static OllamaChatRequest ToOllamaRequest(this ChatRequest request, string? defaultModel = null)
     {
         var messages = new List<OllamaMessage>();
-        if (!string.IsNullOrEmpty(request.SystemPrompt))
+        if (!string.IsNullOrWhiteSpace(request.SystemPrompt))
             messages.Add(new OllamaMessage { Role = "system", Content = request.SystemPrompt });
+
         foreach (var msg in request.Messages)
             messages.Add(new OllamaMessage { Role = msg.Role, Content = msg.Content });
 

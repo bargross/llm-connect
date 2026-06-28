@@ -1,4 +1,5 @@
 ﻿using LLMConnect.Models;
+using System.ComponentModel.DataAnnotations;
 
 namespace LLMConnect.Settings;
 

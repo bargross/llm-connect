@@ -4,7 +4,7 @@ using LLMConnect.Settings;
 using System.Text;
 using System.Text.Json;
 
-namespace LLMConnect.Providers;
+namespace LLMConnect;
 
 internal class OllamaProvider(HttpClient httpClient, LLMClientOptions options) : ILLMProvider
 {

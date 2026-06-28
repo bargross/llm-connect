@@ -3,9 +3,8 @@ using LLMConnect.Models;
 using LLMConnect.Settings;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
-namespace LLMConnect.Providers;
+namespace LLMConnect;
 
 internal class AnthropicProvider(HttpClient httpClient, LLMClientOptions options) : ILLMProvider
 {
@@ -22,6 +21,7 @@ internal class AnthropicProvider(HttpClient httpClient, LLMClientOptions options
         {
             var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
             var error = JsonSerializer.Deserialize<AnthropicErrorResponse>(errorJson);
+
             throw new LLMConnectException("Anthropic", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
         }
 
@@ -49,6 +49,7 @@ internal class AnthropicProvider(HttpClient httpClient, LLMClientOptions options
         {
             var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
             var error = JsonSerializer.Deserialize<AnthropicErrorResponse>(errorJson);
+
             throw new LLMConnectException("Anthropic", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
         }
 
