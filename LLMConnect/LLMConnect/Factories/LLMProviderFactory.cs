@@ -13,7 +13,7 @@ internal class LLMProviderFactory : ILLMProviderFactory
     {
         _providedClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
 
-        OptionsValidator.Validate(options);
+        LLMConnectOptionsValidator.Validate(options);
         _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
@@ -21,11 +21,9 @@ internal class LLMProviderFactory : ILLMProviderFactory
     {
         _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
 
-        OptionsValidator.Validate(options);
+        LLMConnectOptionsValidator.Validate(options);
         _options = options ?? throw new ArgumentNullException(nameof(options));
     }
-
-    public LLMProviderFactory() { }
 
     public ILLMProvider CreateProvider()
     {
