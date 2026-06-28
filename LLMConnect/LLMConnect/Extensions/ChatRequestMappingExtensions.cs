@@ -4,7 +4,6 @@ namespace LLMConnect;
 
 internal static class ChatRequestBuilderExtensions
 {
-    // ---------- OpenAI ----------
     internal static OpenAIChatRequest ToOpenAIRequest(this ChatRequest request, string? defaultModel = null)
     {
         var messages = new List<OpenAIMessage>();
