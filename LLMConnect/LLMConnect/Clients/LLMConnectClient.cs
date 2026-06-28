@@ -6,7 +6,7 @@ namespace LLMConnect;
 /// <summary>
 /// 
 /// </summary>
-public class LLMClient : ILLMClient
+public class LLMConnectClient : ILLMConnectClient
 {
     private readonly ILLMProvider _provider;
 
@@ -14,7 +14,7 @@ public class LLMClient : ILLMClient
     /// user provides only options (library creates HttpClient)
     /// </summary>
     /// <param name="options"></param>
-    public LLMClient(LLMClientOptions options)
+    public LLMConnectClient(LLMConnectClientOptions options)
         : this(options, new HttpClient())
     {
     }
@@ -25,7 +25,7 @@ public class LLMClient : ILLMClient
     /// </summary>
     /// <param name="options">library options</param>
     /// <param name="httpClient">user defined client</param>
-    public LLMClient(LLMClientOptions options, HttpClient httpClient)
+    public LLMConnectClient(LLMConnectClientOptions options, HttpClient httpClient)
         : this(new LLMProviderFactory(options, httpClient))
     {
     }
@@ -35,12 +35,12 @@ public class LLMClient : ILLMClient
     /// </summary>
     /// <param name="options">library options</param>
     /// <param name="httpClientFactory">user defined client factory</param>
-    public LLMClient(LLMClientOptions options, IHttpClientFactory httpClientFactory)
+    public LLMConnectClient(LLMConnectClientOptions options, IHttpClientFactory httpClientFactory)
         : this(new LLMProviderFactory(options, httpClientFactory))
     {
     }
 
-    private LLMClient(ILLMProviderFactory factory)
+    private LLMConnectClient(ILLMProviderFactory factory)
     {
         _provider = factory.CreateProvider();
     }

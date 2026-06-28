@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 
 namespace LLMConnect;
 
-internal class OpenAIProvider(HttpClient httpClient, LLMClientOptions options) : ILLMProvider
+internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions options) : ILLMProvider
 {
     public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {

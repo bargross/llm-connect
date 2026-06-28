@@ -2,7 +2,7 @@
 
 namespace LLMConnect;
 
-public interface ILLMClient
+public interface ILLMConnectClient
 {
     Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default);
     IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default);

@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace LLMConnect;
 
-internal class OllamaProvider(HttpClient httpClient, LLMClientOptions options) : ILLMProvider
+internal class OllamaProvider(HttpClient httpClient, LLMConnectClientOptions options) : ILLMProvider
 {
     public async Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {

@@ -6,7 +6,7 @@ namespace LLMConnect;
 
 internal static class HttpClientConfigurator
 {
-    public static HttpClient ConfigureForProvider(LLMClientOptions options, HttpClient client)
+    internal static HttpClient ConfigureForProvider(LLMConnectClientOptions options, HttpClient client)
     {
         // Resolve the endpoint (including placeholders)
         var endpoint = ResolveEndpoint(options);
@@ -49,7 +49,7 @@ internal static class HttpClientConfigurator
         return client;
     }
 
-    private static string ResolveEndpoint(LLMClientOptions options)
+    private static string ResolveEndpoint(LLMConnectClientOptions options)
     {
         if (!string.IsNullOrWhiteSpace(options.Endpoint))
             return options.Endpoint;

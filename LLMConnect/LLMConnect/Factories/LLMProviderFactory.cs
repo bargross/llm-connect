@@ -6,10 +6,10 @@ namespace LLMConnect;
 internal class LLMProviderFactory : ILLMProviderFactory
 {
     private readonly HttpClient? _providedClient;
-    private readonly LLMClientOptions _options;
+    private readonly LLMConnectClientOptions _options;
     private readonly IHttpClientFactory? _httpClientFactory;
 
-    public LLMProviderFactory(LLMClientOptions options, HttpClient httpClient)
+    public LLMProviderFactory(LLMConnectClientOptions options, HttpClient httpClient)
     {
         _providedClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
 
@@ -17,7 +17,7 @@ internal class LLMProviderFactory : ILLMProviderFactory
         _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
-    public LLMProviderFactory(LLMClientOptions options, IHttpClientFactory httpClientFactory)
+    public LLMProviderFactory(LLMConnectClientOptions options, IHttpClientFactory httpClientFactory)
     {
         _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
 
@@ -41,7 +41,7 @@ internal class LLMProviderFactory : ILLMProviderFactory
         };
     }
 
-    private HttpClient GetOrCreateHttpClient(LLMClientOptions options)
+    private HttpClient GetOrCreateHttpClient(LLMConnectClientOptions options)
     {
         HttpClient client;
 

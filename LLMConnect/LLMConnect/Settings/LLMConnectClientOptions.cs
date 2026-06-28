@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace LLMConnect.Settings;
 
-public class LLMClientOptions
+public class LLMConnectClientOptions
 {
     public ProviderType Provider { get; set; } = ProviderType.OpenAI;
 

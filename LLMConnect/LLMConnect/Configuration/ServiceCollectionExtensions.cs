@@ -22,16 +22,16 @@ public static class ServiceCollectionExtensions
     /// <returns></returns>
     public static IServiceCollection AddLLMConnect(
         this IServiceCollection services,
-        Action<LLMClientOptions>? configure = null,
+        Action<LLMConnectClientOptions>? configure = null,
         Action<ResiliencePipelineBuilder<HttpResponseMessage>>? configureResilience = null)
     {
         if (configure != null)
             services.Configure(configure);
         else
-            services.Configure<LLMClientOptions>(_ => { });
+            services.Configure<LLMConnectClientOptions>(_ => { });
 
         services.AddHttpClient("LLMConnect")
-            .AddResilienceHandler("LLMRetryPipeline", builder =>
+            .AddResilienceHandler("LLMConnectRetryPipeline", builder =>
             {
                 builder.AddRetry(new HttpRetryStrategyOptions
                 {
@@ -68,12 +68,12 @@ public static class ServiceCollectionExtensions
                 configureResilience?.Invoke(builder);
             });
 
-        services.AddSingleton<ILLMClient>(sp =>
+        services.AddSingleton<ILLMConnectClient>(sp =>
         {
-            var options = sp.GetRequiredService<IOptions<LLMClientOptions>>().Value;
+            var options = sp.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
             var factory = sp.GetRequiredService<IHttpClientFactory>();
 
-            return new LLMClient(options, factory);
+            return new LLMConnectClient(options, factory);
         });
 
         return services;

@@ -5,7 +5,7 @@ namespace LLMConnect;
 
 internal static class OptionsValidator
 {
-    public static void Validate(LLMClientOptions options)
+    public static void Validate(LLMConnectClientOptions options)
     {
         if (options == null)
             throw new ArgumentNullException(nameof(options));
