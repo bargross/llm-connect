@@ -1,6 +1,7 @@
 ﻿using LLMConnect.Exceptions;
 using LLMConnect.Factories;
 using LLMConnect.Models;
+using LLMConnect.Providers;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
@@ -10,7 +11,7 @@ using System.Text.Json.Serialization;
 
 namespace LLMConnect;
 
-internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions options) : ILLMProvider
+internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions options): ProviderBase, ILLMProvider
 {
     private readonly ILogger<OpenAIProvider>? _logger = options.LoggerFactory?.CreateLogger<OpenAIProvider>();
     private readonly IChatRequestValidator _validator = ChatRequestValidatorFactory.Create(options.Provider);
@@ -31,12 +32,11 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions opt
 
         if (!response.IsSuccessStatusCode)
         {
-            var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
-            var error = JsonSerializer.Deserialize<OpenAIErrorResponse>(errorJson);
+            var errorMessage = await ExtractErrorMessage(response, cancellationToken);
 
-            if (_logger != null) _logger.LogError(error?.Error?.Message, error);
+            if (_logger != null) _logger.LogError($"OpenAI error: {errorMessage}");
 
-            throw new LLMConnectException("OpenAI", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
+            throw new LLMConnectException("OpenAI", errorMessage);
         }
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -68,15 +68,18 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions opt
         });
 
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var messageReq = new HttpRequestMessage(HttpMethod.Post, httpClient.BaseAddress)
+        {
+            Content = content
+        };
 
-        var response = await httpClient.PostAsync("", content, cancellationToken);
+        var response = await httpClient.SendAsync(messageReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
-            var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
-            var error = JsonSerializer.Deserialize<OpenAIErrorResponse>(errorJson);
-
-            var exception  = new LLMConnectException("OpenAI", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
+            var errorMessage = await ExtractErrorMessage(response, cancellationToken);
+         
+            var exception  = new LLMConnectException("OpenAI", errorMessage);
 
             if (_logger != null) _logger.LogError(exception.Provider, exception.Message, exception);
 
@@ -88,8 +91,24 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions opt
 
         string? line;
         var count = 1;
-        while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+
+        var streamEnded = false;
+        while (streamEnded)
         {
+            try
+            {
+
+                line = await reader.ReadLineAsync(cancellationToken);
+                streamEnded = line != null;
+
+            }
+            catch (OperationCanceledException)
+            {
+                _logger?.LogError("OpenAI stream has ended.");
+
+                break; // let the caller handle this on its own
+            }
+
             if (string.IsNullOrWhiteSpace(line))
             {
                 if (_logger != null) _logger.LogInformation($"OpenAI stream Line number {count} is empty, ignoring...");
@@ -116,7 +135,7 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions opt
                     continue;
                 }
 
-                if (chunk?.Choices?.FirstOrDefault()?.Delta?.Content is string contentChunk && !string.IsNullOrWhiteSpace(contentChunk))
+                if (chunk?.Choices?.FirstOrDefault()?.Delta?.Content is string contentChunk && !string.IsNullOrEmpty(contentChunk))
                 {
                     yield return new ChatChunk
                     {

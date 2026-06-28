@@ -1,6 +1,7 @@
 ﻿using LLMConnect.Exceptions;
 using LLMConnect.Factories;
 using LLMConnect.Models;
+using LLMConnect.Providers;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
@@ -9,7 +10,7 @@ using System.Text.Json;
 
 namespace LLMConnect;
 
-internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions options) : ILLMProvider
+internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions options): ProviderBase, ILLMProvider
 {
     private readonly ILogger<GoogleProvider>? _logger = options.LoggerFactory?.CreateLogger<GoogleProvider>();
     private readonly IChatRequestValidator _validator = ChatRequestValidatorFactory.Create(options.Provider);
@@ -32,7 +33,8 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
             var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
             var error = JsonSerializer.Deserialize<GoogleErrorResponse>(errorJson);
 
-            var exception = new LLMConnectException("Google", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
+            var errorMessage = await ExtractErrorMessage(response, cancellationToken);
+            var exception = new LLMConnectException("Google", errorMessage);
             
             if (_logger != null) _logger.LogError(exception.Provider, exception.Message, exception);
 
@@ -55,19 +57,26 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
             .Replace("{model}", model)
             .Replace("generateContent", "streamGenerateContent");
 
+        if (!endpoint.Contains("alt=sse"))
+        {
+            endpoint += (endpoint.Contains('?') ? "&" : "?") + "alt=sse";
+        }
+
         var googleRequest = request.ToGoogleRequest();
 
         var json = JsonSerializer.Serialize(googleRequest);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var messageReq = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        {
+            Content = content
+        };
 
-        var response = await httpClient.PostAsync(endpoint, content, cancellationToken);
+        var response = await httpClient.SendAsync(messageReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
-            var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
-            var error = JsonSerializer.Deserialize<GoogleErrorResponse>(errorJson);
-
-            var exception = new LLMConnectException("Google", error?.Error?.Message ?? $"HTTP error: {response.StatusCode}");
+            var errorMessage = await ExtractErrorMessage(response, cancellationToken);
+            var exception = new LLMConnectException("Google", errorMessage);
 
             if (_logger != null) _logger.LogError(exception.Provider, exception.Message, exception);
 
@@ -79,8 +88,23 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
 
         string? line;
         var counter = 1;
-        while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+        var streamEnded = false;
+        while (streamEnded)
         {
+            try
+            {
+
+                line = await reader.ReadLineAsync(cancellationToken);
+                streamEnded = line != null;
+
+            }
+            catch (OperationCanceledException)
+            {
+                _logger?.LogError("Google stream has ended.");
+
+                break; // let the caller handle this on its own
+            }
+
             if (string.IsNullOrWhiteSpace(line))
             {
                 if (_logger != null) _logger.LogInformation($"Google stream Line {counter} is empty, ignoring...");
@@ -109,7 +133,7 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
                 continue;
             }
 
-            if (chunk?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text is string contentChunk && !string.IsNullOrWhiteSpace(contentChunk))
+            if (chunk?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text is string contentChunk && !string.IsNullOrEmpty(contentChunk))
             {
                 yield return new ChatChunk
                 {

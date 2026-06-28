@@ -1,6 +1,7 @@
 ﻿using LLMConnect.Exceptions;
 using LLMConnect.Factories;
 using LLMConnect.Models;
+using LLMConnect.Providers;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
@@ -9,7 +10,7 @@ using System.Text.Json;
 
 namespace LLMConnect;
 
-internal class OllamaProvider(HttpClient httpClient, LLMConnectClientOptions options) : ILLMProvider
+internal class OllamaProvider(HttpClient httpClient, LLMConnectClientOptions options): ProviderBase, ILLMProvider
 {
     private readonly ILogger<OllamaProvider>? _logger = options.LoggerFactory?.CreateLogger<OllamaProvider>();
     private readonly IChatRequestValidator _validator = ChatRequestValidatorFactory.Create(options.Provider);
@@ -29,7 +30,8 @@ internal class OllamaProvider(HttpClient httpClient, LLMConnectClientOptions opt
         {
             var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
 
-            var exception = new LLMConnectException("Ollama", $"HTTP error {response.StatusCode}: {errorJson}");
+            var errorMessage = await ExtractErrorMessage(response, cancellationToken);
+            var exception = new LLMConnectException("Ollama", errorMessage);
 
             if (_logger != null) _logger.LogError(exception.Provider, exception.Message, exception);
 
@@ -52,13 +54,18 @@ internal class OllamaProvider(HttpClient httpClient, LLMConnectClientOptions opt
 
         var json = JsonSerializer.Serialize(ollamaRequest);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var messageReq = new HttpRequestMessage(HttpMethod.Post, httpClient.BaseAddress)
+        {
+            Content = content
+        };
 
-        var response = await httpClient.PostAsync("", content, cancellationToken);
+        var response = await httpClient.SendAsync(messageReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
-            var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
-            var exception = new LLMConnectException("Ollama", $"HTTP error {response.StatusCode}: {errorJson}");
+            var errorMessage = await ExtractErrorMessage(response, cancellationToken);
+         
+            var exception = new LLMConnectException("Ollama", errorMessage);
 
             if (_logger != null) _logger.LogError(exception.Provider, exception.Message, exception);
 
@@ -70,8 +77,23 @@ internal class OllamaProvider(HttpClient httpClient, LLMConnectClientOptions opt
 
         string? line;
         var counter = 1;
-        while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+        var streamEnded = false;
+        while (streamEnded)
         {
+            try
+            {
+
+                line = await reader.ReadLineAsync(cancellationToken);
+                streamEnded = line != null;
+
+            }
+            catch (OperationCanceledException)
+            {
+                _logger?.LogError("Ollama stream has ended.");
+
+                break; // let the caller handle this on its own
+            }
+
             if (string.IsNullOrWhiteSpace(line))
             {
                 if (_logger != null) _logger.LogInformation($"Ollama stream Line {counter} is empty, ignoring....");
@@ -93,7 +115,7 @@ internal class OllamaProvider(HttpClient httpClient, LLMConnectClientOptions opt
                 continue;
             }
 
-            if (chunk?.Message?.Content is string contentChunk && !string.IsNullOrWhiteSpace(contentChunk))
+            if (chunk?.Message?.Content is string contentChunk && !string.IsNullOrEmpty(contentChunk))
             {
                 yield return new ChatChunk
                 {

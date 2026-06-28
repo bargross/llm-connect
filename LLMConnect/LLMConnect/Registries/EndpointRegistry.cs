@@ -8,7 +8,7 @@ internal static class EndpointRegistry
     {
         { ProviderType.OpenAI, "https://api.openai.com/v1/chat/completions" },
         { ProviderType.Anthropic, "https://api.anthropic.com/v1/messages" },
-        { ProviderType.Google, "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}" },
+        { ProviderType.Google, "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent" },
         { ProviderType.Ollama, "http://localhost:{port}/api/chat" }
     };
 

@@ -1,4 +1,5 @@
-﻿using LLMConnect.Settings;
+﻿using LLMConnect.Internal;
+using LLMConnect.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
@@ -31,9 +32,15 @@ public static class ServiceCollectionExtensions
         else
             services.Configure<LLMConnectClientOptions>(_ => { });
 
+
         services.AddHttpClient("LLMConnect")
-            .AddResilienceHandler("LLMConnectRetryPipeline", builder =>
-            {
+             .AddHttpMessageHandler(sp => {
+                var options = sp.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
+
+                 return new RetryDelegatingHandler(options.MaxRetries, new SocketsHttpHandler());
+             })
+             .AddResilienceHandler("LLMConnectRetryPipeline", builder =>
+             {
                 builder.AddRetry(new HttpRetryStrategyOptions
                 {
                     MaxRetryAttempts = 3,

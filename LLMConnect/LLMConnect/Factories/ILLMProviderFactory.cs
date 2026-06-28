@@ -4,5 +4,5 @@ namespace LLMConnect;
 
 internal interface ILLMProviderFactory
 {
-    ILLMProvider CreateProvider();
+    (HttpClient, ILLMProvider) CreateProvider();
 }

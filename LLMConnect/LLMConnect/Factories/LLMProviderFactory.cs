@@ -31,16 +31,16 @@ internal class LLMProviderFactory : ILLMProviderFactory
         LLMConnectOptionsValidator.Validate(options, _logger);
     }
 
-    public ILLMProvider CreateProvider()
+    public (HttpClient, ILLMProvider) CreateProvider()
     {
         var httpClient = GetOrCreateHttpClient(_options);
 
         return _options.Provider switch
         {
-            ProviderType.OpenAI => new OpenAIProvider(httpClient, _options),
-            ProviderType.Anthropic => new AnthropicProvider(httpClient, _options),
-            ProviderType.Google => new GoogleProvider(httpClient, _options),
-            ProviderType.Ollama => new OllamaProvider(httpClient, _options),
+            ProviderType.OpenAI => (httpClient, new OpenAIProvider(httpClient, _options)),
+            ProviderType.Anthropic => (httpClient, new AnthropicProvider(httpClient, _options)),
+            ProviderType.Google => (httpClient, new GoogleProvider(httpClient, _options)),
+            ProviderType.Ollama => (httpClient, new OllamaProvider(httpClient, _options)),
             _ => throw new NotSupportedException($"Provider '{_options.Provider}' is not supported.")
         };
     }

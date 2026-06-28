@@ -29,6 +29,7 @@ internal static class HttpClientConfigurator
                 break;
 
             case ProviderType.Google:
+                client.DefaultRequestHeaders.Add("x-goog-api-key", options.ApiKey);
                 client.DefaultRequestHeaders.Add("Accept", "application/json");
                 break;
 
@@ -55,16 +56,10 @@ internal static class HttpClientConfigurator
 
         var endpoint = EndpointRegistry.GetDefaultEndpoint(options.Provider);
 
-        switch (options.Provider)
+        if (options.Provider == ProviderType.Ollama)
         {
-            case ProviderType.Google:
-                endpoint = endpoint.Replace("{key}", options.ApiKey);
-                break;
-
-            case ProviderType.Ollama:
-                var port = options.OllamaPort?.ToString() ?? "11434";
-                endpoint = endpoint.Replace("{port}", port);
-                break;
+            var port = options.OllamaPort?.ToString() ?? "11434";
+            endpoint = endpoint.Replace("{port}", port);
         }
 
         return endpoint;
