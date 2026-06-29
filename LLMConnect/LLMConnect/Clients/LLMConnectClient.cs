@@ -19,7 +19,7 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
     /// </summary>
     /// <param name="options"></param>
     public LLMConnectClient(LLMConnectClientOptions options)
-        : this(options, new HttpClient(new RetryDelegatingHandler(options.MaxRetries)))
+        : this(options, new HttpClient(new RetryDelegatingHandler(options.MaxRetries, options.LoggerFactory?.CreateLogger<RetryDelegatingHandler>())))
     {
         _ownsHttpClient = true;
 
