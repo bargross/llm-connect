@@ -31,7 +31,7 @@ internal class SseStreamEventReader : IStreamEventReader
             }
             catch (OperationCanceledException)
             {
-                _logger?.LogError("OpenAI stream has ended.");
+                _logger?.LogError("Stream has ended.");
 
                 break; // let the caller handle this on its own
             }

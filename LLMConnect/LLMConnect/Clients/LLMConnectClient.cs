@@ -1,6 +1,7 @@
 ﻿using LLMConnect.Internal;
 using LLMConnect.Models;
 using LLMConnect.Settings;
+using Microsoft.Extensions.Logging;
 
 namespace LLMConnect;
 
@@ -12,15 +13,18 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
     private readonly ILLMProvider _provider;
     private readonly HttpClient _httpClient;
     private readonly bool _ownsHttpClient;
+    private readonly ILogger<LLMConnectClient>? _logger;
 
     /// <summary>
     /// user provides only options (library creates HttpClient)
     /// </summary>
     /// <param name="options"></param>
     public LLMConnectClient(LLMConnectClientOptions options)
-        : this(options, new HttpClient(new RetryDelegatingHandler(options.MaxRetries, new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) })))
+        : this(options, new HttpClient(new RetryDelegatingHandler(options.MaxRetries)))
     {
         _ownsHttpClient = true;
+
+        _logger = options.LoggerFactory?.CreateLogger<LLMConnectClient>();
     }
 
 
@@ -34,6 +38,10 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
     {
         _ownsHttpClient = false;
         _httpClient = httpClient;
+        _logger = options.LoggerFactory?.CreateLogger<LLMConnectClient>();
+
+        _logger?.LogWarning(
+            "Using a user-supplied HttpClient. Retry logic must be configured by the caller.");
     }
 
     /// <summary>

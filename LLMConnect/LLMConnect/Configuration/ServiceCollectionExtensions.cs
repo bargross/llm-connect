@@ -37,7 +37,7 @@ public static class ServiceCollectionExtensions
              .AddHttpMessageHandler(sp => {
                 var options = sp.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
 
-                 return new RetryDelegatingHandler(options.MaxRetries, new SocketsHttpHandler());
+                 return new RetryDelegatingHandler(options.MaxRetries);
              })
              .AddResilienceHandler("LLMConnectRetryPipeline", builder =>
              {

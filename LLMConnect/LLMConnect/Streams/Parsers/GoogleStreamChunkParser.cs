@@ -11,15 +11,34 @@ internal class GoogleStreamChunkParser : ChunkParserBase<GoogleStreamChunkParser
 
     public ChatChunk? Parse(StreamEvent evt)
     {
-        if (string.IsNullOrEmpty(evt.Data) || evt.Data == "[DONE]")
+        if (string.IsNullOrEmpty(evt.Data))
             return null;
 
         try
         {
             var chunk = JsonSerializer.Deserialize<GoogleChatResponse>(evt.Data);
-            if (chunk?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text is string text && !string.IsNullOrEmpty(text))
+            var candidate = chunk?.Candidates?.FirstOrDefault();
+            var text = candidate?.Content?.Parts?.FirstOrDefault()?.Text;
+
+            if (!string.IsNullOrEmpty(text))
             {
-                return new ChatChunk { Content = text, IsComplete = false };
+                return new ChatChunk
+                {
+                    Content = text,
+                    IsComplete = false,
+                    FinishReason = null
+                };
+            }
+
+            // If this chunk contains a finishReason, yield the final chunk
+            if (candidate?.FinishReason != null)
+            {
+                return new ChatChunk
+                {
+                    Content = string.Empty,
+                    IsComplete = true,
+                    FinishReason = candidate.FinishReason
+                };
             }
         }
         catch (JsonException ex)

@@ -6,10 +6,14 @@ internal class RetryDelegatingHandler : DelegatingHandler
 {
     private readonly int _maxRetries;
 
-    public RetryDelegatingHandler(int maxRetries, HttpMessageHandler innerHandler)
-        : base(innerHandler)
+    public RetryDelegatingHandler(int maxRetries)
     {
         _maxRetries = maxRetries;
+
+        InnerHandler = new SocketsHttpHandler
+        {
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5)
+        };
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(

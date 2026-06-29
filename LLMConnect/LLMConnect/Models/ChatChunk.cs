@@ -14,4 +14,9 @@ public class ChatChunk
     /// 
     /// </summary>
     public bool IsComplete { get; set; }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    public string? FinishReason { get; set; }
 }
