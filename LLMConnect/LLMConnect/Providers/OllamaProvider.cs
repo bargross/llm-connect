@@ -25,16 +25,7 @@ internal class OllamaProvider(HttpClient httpClient, LLMConnectClientOptions opt
         var response = await httpClient.PostAsync("", content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-        {
-            var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
-
-            var errorMessage = await ExtractErrorMessage(response, cancellationToken);
-            var exception = new LLMConnectException("Ollama", errorMessage);
-
-            if (_logger != null) _logger.LogError(exception.Provider, exception.Message, exception);
-
-            throw exception;
-        }
+            await LogAndThrow(options.Provider, response, _logger, cancellationToken);
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
         var ollamaResponse = JsonSerializer.Deserialize<OllamaChatResponse>(responseJson);
@@ -60,70 +51,17 @@ internal class OllamaProvider(HttpClient httpClient, LLMConnectClientOptions opt
         var response = await httpClient.SendAsync(messageReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-        {
-            var errorMessage = await ExtractErrorMessage(response, cancellationToken);
-         
-            var exception = new LLMConnectException("Ollama", errorMessage);
-
-            if (_logger != null) _logger.LogError(exception.Provider, exception.Message, exception);
-
-            throw exception;
-        }
+            await LogAndThrow(options.Provider, response, _logger, cancellationToken);
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var reader = new StreamReader(stream);
+        var reader = StreamReaderFactory.Create(options.Provider, options);
+        var parser = StreamChunkParserFactory.Create(options.Provider, options);
 
-        string? line;
-        var counter = 1;
-        var streaming = true;
-        while (streaming)
+        await foreach (var evt in reader.ReadEventsAsync(stream, cancellationToken))
         {
-            try
-            {
-
-                line = await reader.ReadLineAsync(cancellationToken);
-                streaming = line != null;
-
-            }
-            catch (OperationCanceledException)
-            {
-                _logger?.LogError("Ollama stream has ended.");
-
-                break; // let the caller handle this on its own
-            }
-
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                if (_logger != null) _logger.LogInformation($"Ollama stream Line {counter} is empty, ignoring....");
-
-                continue;
-            }
-            
-            counter++;
-
-            OllamaStreamChunk? chunk = null;
-            try
-            {
-                chunk = JsonSerializer.Deserialize<OllamaStreamChunk>(line);
-            }
-            catch (JsonException ex)
-            {
-                if (_logger != null) _logger.LogError($"Ollama stream errored deserializing response due to: {ex.Message}", ex);
-
-                continue;
-            }
-
-            if (chunk?.Message?.Content is string contentChunk && !string.IsNullOrEmpty(contentChunk))
-            {
-                yield return new ChatChunk
-                {
-                    Content = contentChunk,
-                    IsComplete = chunk.Done ?? false
-                };
-            }
-
-            if (chunk?.Done == true)
-                yield break;
+            var chunk = parser.Parse(evt);
+            if (chunk != null)
+                yield return chunk;
         }
     }
 }

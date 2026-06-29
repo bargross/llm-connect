@@ -17,5 +17,5 @@ internal class OpenAIChatResponse
     public List<OpenAIChoice>? Choices { get; set; }
 
     [JsonPropertyName("usage")]
-    public OpenAiUsage? Usage { get; set; }
+    public OpenAIUsage? Usage { get; set; }
 }

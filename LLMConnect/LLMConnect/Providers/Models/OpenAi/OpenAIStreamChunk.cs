@@ -2,7 +2,7 @@
 
 namespace LLMConnect;
 
-internal class OpenAiStreamChunk
+internal class OpenAIStreamChunk
 {
     [JsonPropertyName("id")]
     public string? Id { get; set; }

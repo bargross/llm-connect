@@ -29,13 +29,7 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions opt
         var response = await httpClient.PostAsync("", content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-        {
-            var errorMessage = await ExtractErrorMessage(response, cancellationToken);
-
-            if (_logger != null) _logger.LogError($"OpenAI error: {errorMessage}");
-
-            throw new LLMConnectException("OpenAI", errorMessage);
-        }
+            await LogAndThrow(options.Provider, response, _logger, cancellationToken);
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
         var openAiResponse = JsonSerializer.Deserialize<OpenAIChatResponse>(responseJson);
@@ -74,74 +68,17 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions opt
         var response = await httpClient.SendAsync(messageReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-        {
-            var errorMessage = await ExtractErrorMessage(response, cancellationToken);
-         
-            var exception  = new LLMConnectException("OpenAI", errorMessage);
-
-            if (_logger != null) _logger.LogError(exception.Provider, exception.Message, exception);
-
-            throw exception;
-        }
+            await LogAndThrow(options.Provider, response, _logger, cancellationToken);
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var reader = new StreamReader(stream);
+        var reader = StreamReaderFactory.Create(options.Provider, options);
+        var parser = StreamChunkParserFactory.Create(options.Provider, options);
 
-        string? line;
-        var count = 1;
-
-        var streaming = true;
-        while (streaming)
+        await foreach (var evt in reader.ReadEventsAsync(stream, cancellationToken))
         {
-            try
-            {
-
-                line = await reader.ReadLineAsync(cancellationToken);
-                streaming = line != null;
-
-            }
-            catch (OperationCanceledException)
-            {
-                _logger?.LogError("OpenAI stream has ended.");
-
-                break; // let the caller handle this on its own
-            }
-
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                if (_logger != null) _logger.LogInformation($"OpenAI stream Line number {count} is empty, ignoring...");
-
-                continue;
-            }
-
-            count++; 
-
-            if (line.StartsWith("data: ", StringComparison.OrdinalIgnoreCase))
-            {
-                var data = line.Substring(6);
-                if (data == "[DONE]")
-                    yield break;
-
-                OpenAiStreamChunk? chunk = null;
-                try
-                {
-                    chunk = JsonSerializer.Deserialize<OpenAiStreamChunk>(data);
-                }
-                catch (JsonException ex)
-                {
-                    if (_logger != null) _logger.LogError($"OpenAI stream errored deserializing response due to: {ex.Message}", ex);
-                    continue;
-                }
-
-                if (chunk?.Choices?.FirstOrDefault()?.Delta?.Content is string contentChunk && !string.IsNullOrEmpty(contentChunk))
-                {
-                    yield return new ChatChunk
-                    {
-                        Content = contentChunk,
-                        IsComplete = false
-                    };
-                }
-            }
+            var chunk = parser.Parse(evt);
+            if (chunk != null)
+                yield return chunk;
         }
     }
 }

@@ -1,4 +1,8 @@
-﻿using System.Text.Json;
+﻿using LLMConnect.Exceptions;
+using LLMConnect.Models;
+using Microsoft.Extensions.Logging;
+using System.Globalization;
+using System.Text.Json;
 
 namespace LLMConnect
 {
@@ -24,6 +28,19 @@ namespace LLMConnect
             {
                 return $"HTTP error: {response.StatusCode} - Failed to read error body: {ex.Message}";
             }
+        }
+
+        protected async Task LogAndThrow(ProviderType providerType, HttpResponseMessage response, ILogger? logger, CancellationToken cancellationToken)
+        {
+            var provider = CultureInfo.InvariantCulture.TextInfo.ToTitleCase(providerType.ToString());
+
+            var errorMessage = await ExtractErrorMessage(response, cancellationToken);
+
+            var exception = new LLMConnectException(provider, errorMessage);
+
+            logger?.LogError(exception.Provider, exception.Message, exception);
+
+            throw exception;
         }
     }
 }

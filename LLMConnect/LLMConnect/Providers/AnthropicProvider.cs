@@ -26,15 +26,7 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions 
         var response = await httpClient.PostAsync("", content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-        {
-            var errorMessage = await ExtractErrorMessage(response, cancellationToken);
-
-            var exception = new LLMConnectException("Anthropic", errorMessage);
-
-            if (_logger != null) _logger.LogError(exception.Provider, exception.Message, exception);
-
-            throw exception;
-        }
+            await LogAndThrow(options.Provider, response, _logger, cancellationToken);
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
         var anthropicResponse = JsonSerializer.Deserialize<AnthropicChatResponse>(responseJson);
@@ -63,89 +55,17 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions 
         var response = await httpClient.SendAsync(messageReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-        {
-            var errorMessage = await ExtractErrorMessage(response, cancellationToken);
-
-            var exception = new LLMConnectException("Anthropic", errorMessage);
-
-            if (_logger != null) _logger.LogError(exception.Provider, exception.Message, exception);
-
-            throw exception;
-        }
+            await LogAndThrow(options.Provider, response, _logger, cancellationToken);
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var reader = new StreamReader(stream);
+        var reader = StreamReaderFactory.Create(options.Provider, options);
+        var parser = StreamChunkParserFactory.Create(options.Provider, options);
 
-        string? currentEvent = null;
-        string? line;
-        var counter = 1;
-        var streaming = true;
-        while (streaming)
+        await foreach (var evt in reader.ReadEventsAsync(stream, cancellationToken))
         {
-            try
-            {
-
-                line = await reader.ReadLineAsync(cancellationToken);
-                streaming = line != null;
-            }
-            catch (OperationCanceledException)
-            {
-                _logger?.LogError("Anthropic stream has ended.");
-
-                break; // let the caller handle this on its own
-            }
-
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                if (_logger != null) _logger.LogInformation($"Anthropic stream Line {counter} is empty, ignoring...");
-
-                continue;
-            }
-
-            if (line.StartsWith("event: ", StringComparison.OrdinalIgnoreCase))
-            {
-                currentEvent = line.Substring(7).Trim();
-                continue;
-            }
-
-            if (!line.StartsWith("data: ", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var data = line.Substring(6).Trim();
-            if (data == "[DONE]")
-                yield break;
-
-            switch (currentEvent)
-            {
-                case "content_block_delta":
-                    AnthropicContentBlockDelta? delta;
-                    try
-                    {
-                        delta = JsonSerializer.Deserialize<AnthropicContentBlockDelta>(data);
-                    }
-                    catch (JsonException ex)
-                    {
-                        if (_logger != null) _logger.LogError($"Anthropic stream error deserializing response due to: {ex.Message}", ex);
-
-                        continue;
-                    }
-
-                    if (delta?.Delta?.Text is string textChunk && !string.IsNullOrEmpty(textChunk))
-                    {
-                        yield return new ChatChunk
-                        {
-                            Content = textChunk,
-                            IsComplete = false
-                        };
-                    }
-                    break;
-
-                case "message_stop":
-                    yield break;
-
-                default:
-                    break;
-            }
+            var chunk = parser.Parse(evt);
+            if (chunk != null)
+                yield return chunk;
         }
     }
 }

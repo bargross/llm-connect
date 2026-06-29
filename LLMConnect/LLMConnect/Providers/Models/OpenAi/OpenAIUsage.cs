@@ -2,7 +2,7 @@
 
 namespace LLMConnect;
 
-internal class OpenAiUsage
+internal class OpenAIUsage
 {
     [JsonPropertyName("prompt_tokens")]
     public int PromptTokens { get; set; }

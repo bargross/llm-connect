@@ -27,14 +27,7 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
         var response = await httpClient.PostAsync(endpoint, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-        {
-            var errorMessage = await ExtractErrorMessage(response, cancellationToken);
-            var exception = new LLMConnectException("Google", errorMessage);
-            
-            if (_logger != null) _logger.LogError(exception.Provider, exception.Message, exception);
-
-            throw exception;
-        }
+            await LogAndThrow(options.Provider, response, _logger, cancellationToken);
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
         var googleResponse = JsonSerializer.Deserialize<GoogleChatResponse>(responseJson);
@@ -69,73 +62,17 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
         var response = await httpClient.SendAsync(messageReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-        {
-            var errorMessage = await ExtractErrorMessage(response, cancellationToken);
-            var exception = new LLMConnectException("Google", errorMessage);
-
-            if (_logger != null) _logger.LogError(exception.Provider, exception.Message, exception);
-
-            throw exception;
-        }
+            await LogAndThrow(options.Provider, response, _logger, cancellationToken);
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var reader = new StreamReader(stream);
+        var reader = StreamReaderFactory.Create(options.Provider, options);
+        var parser = StreamChunkParserFactory.Create(options.Provider, options);
 
-        string? line;
-        var counter = 1;
-        var streaming = true;
-        while (streaming)
+        await foreach (var evt in reader.ReadEventsAsync(stream, cancellationToken))
         {
-            try
-            {
-
-                line = await reader.ReadLineAsync(cancellationToken);
-                streaming = line != null;
-
-            }
-            catch (OperationCanceledException)
-            {
-                _logger?.LogError("Google stream has ended.");
-
-                break; // let the caller handle this on its own
-            }
-
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                if (_logger != null) _logger.LogInformation($"Google stream Line {counter} is empty, ignoring...");
-
-                continue;
-            }
-
-            counter++;
-
-            if (!line.StartsWith("data: ", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var data = line.Substring(6);
-            if (data == "[DONE]")
-                yield break;
-
-            GoogleChatResponse? chunk = null;
-            try
-            {
-                chunk = JsonSerializer.Deserialize<GoogleChatResponse>(data);
-            }
-            catch (JsonException ex)
-            {
-                if (_logger != null) _logger.LogError($"Google stream error deserializing response due to: {ex.Message}", ex);
-
-                continue;
-            }
-
-            if (chunk?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text is string contentChunk && !string.IsNullOrEmpty(contentChunk))
-            {
-                yield return new ChatChunk
-                {
-                    Content = contentChunk,
-                    IsComplete = false
-                };
-            }
+            var chunk = parser.Parse(evt);
+            if (chunk != null)
+                yield return chunk;
         }
     }
 }
