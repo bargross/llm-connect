@@ -13,14 +13,39 @@ namespace LLMConnect
             try
             {
                 var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
-                // Try to parse as JSON; if it fails, use the raw body
+
+                // Try to extract "message" from common error formats (OpenAI, Anthropic, Google, etc.)
                 try
                 {
-                    var error = JsonSerializer.Deserialize<OpenAIErrorResponse>(errorJson);
-                    return error?.Error?.Message ?? $"HTTP error: {response.StatusCode}";
+                    using var doc = JsonDocument.Parse(errorJson);
+                    var root = doc.RootElement;
+
+                    // Try common error paths
+                    if (root.TryGetProperty("error", out var errorObj))
+                    {
+                        // OpenAI: { "error": { "message": "..." } }
+                        if (errorObj.TryGetProperty("message", out var message))
+                            return message.GetString() ?? $"HTTP error: {response.StatusCode}";
+
+                        // Anthropic: { "error": { "message": "..." } } (similar to OpenAI)
+                        if (errorObj.TryGetProperty("message", out var message2))
+                            return message2.GetString() ?? $"HTTP error: {response.StatusCode}";
+
+                        // Google: { "error": { "message": "..." } } (similar)
+                        if (errorObj.TryGetProperty("message", out var message3))
+                            return message3.GetString() ?? $"HTTP error: {response.StatusCode}";
+                    }
+
+                    // Fallback: try any top-level "message"
+                    if (root.TryGetProperty("message", out var topMessage))
+                        return topMessage.GetString() ?? $"HTTP error: {response.StatusCode}";
+
+                    // If we can't find a message, return the raw body
+                    return $"HTTP error: {response.StatusCode} - {errorJson}";
                 }
                 catch (JsonException)
                 {
+                    // Not JSON — use raw body
                     return $"HTTP error: {response.StatusCode} - {errorJson}";
                 }
             }
