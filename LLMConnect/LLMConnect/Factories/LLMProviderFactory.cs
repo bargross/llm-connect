@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace LLMConnect;
 
-internal class LLMProviderFactory : ILLMProviderFactory
+internal class LLMProviderFactory
 {
     private readonly HttpClient _providedClient;
     private readonly LLMConnectClientOptions _options;

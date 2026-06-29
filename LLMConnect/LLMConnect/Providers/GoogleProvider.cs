@@ -32,6 +32,15 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
         var googleResponse = JsonSerializer.Deserialize<GoogleChatResponse>(responseJson);
 
+        if (googleResponse == null)
+        {
+            var exception = new LLMConnectException("Google", "Failed to deserialize response.");
+
+            _logger?.LogError(exception.Provider, exception.Message, exception);
+
+            throw exception;
+        }
+
         return googleResponse?.ToChatResponse();
     }
 

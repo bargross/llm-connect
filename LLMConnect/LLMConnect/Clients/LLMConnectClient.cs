@@ -59,7 +59,7 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
             _logger = options.LoggerFactory?.CreateLogger<LLMConnectClient>();
     }
 
-    private LLMConnectClient(ILLMProviderFactory factory)
+    private LLMConnectClient(LLMProviderFactory factory)
     {
         var (client, provider) = factory.CreateProvider();
         

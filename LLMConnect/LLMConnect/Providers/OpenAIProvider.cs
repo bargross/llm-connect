@@ -38,7 +38,7 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions opt
         {
             var exception = new LLMConnectException("OpenAI", "Failed to deserialize response");
 
-            if (_logger != null) _logger.LogError(exception.Provider, exception.Message, exception);
+            _logger?.LogError(exception.Provider, exception.Message, exception);
 
             throw exception;
         }

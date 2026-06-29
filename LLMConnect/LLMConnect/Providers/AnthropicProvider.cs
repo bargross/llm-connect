@@ -32,7 +32,13 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions 
         var anthropicResponse = JsonSerializer.Deserialize<AnthropicChatResponse>(responseJson);
 
         if (anthropicResponse == null)
-            throw new LLMConnectException("Anthropic", "Failed to deserialize response");
+        {
+            var exception = new LLMConnectException("Anthropic", "Failed to deserialize response");
+
+            _logger?.LogError(exception.Provider, exception.Message, exception);
+
+            throw exception;
+        }
 
         return anthropicResponse.ToChatResponse();
     }

@@ -30,6 +30,15 @@ internal class OllamaProvider(HttpClient httpClient, LLMConnectClientOptions opt
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
         var ollamaResponse = JsonSerializer.Deserialize<OllamaChatResponse>(responseJson);
 
+        if (ollamaResponse == null)
+        {
+            var exception = new LLMConnectException("Ollama", "Failed to deserialize response");
+
+            _logger?.LogError(exception.Provider, exception.Message, exception);
+
+            throw exception;
+        }
+
         return ollamaResponse?.ToChatResponse();
     }
 
