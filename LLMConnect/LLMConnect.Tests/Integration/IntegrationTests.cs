@@ -3,6 +3,7 @@ using LLMConnect.Exceptions;
 using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using WireMock.RequestBuilders;
@@ -587,5 +588,36 @@ public class IntegrationTests : IDisposable
 
         result.Should().NotBeNull();
         result.Content.Should().Be("Ollama retry worked!");
+    }
+
+    [Fact]
+    public async Task OpenAI_ChatAsync_RetryAfterHeader_Honored()
+    {
+        var successResponse = @"{ ... }"; // valid success
+
+        _server
+            .Given(Request.Create().WithPath("/v1/chat/completions").UsingPost())
+            .InScenario("retry_after")
+            .WillSetStateTo("retried")
+            .RespondWith(Response.Create()
+                .WithStatusCode(HttpStatusCode.TooManyRequests)
+                .WithHeader("Retry-After", "5") // 5 seconds
+                .WithBody(@"{""error"":{""message"":""Rate limit""}}"));
+
+        _server
+            .Given(Request.Create().WithPath("/v1/chat/completions").UsingPost())
+            .InScenario("retry_after")
+            .WhenStateIs("retried")
+            .RespondWith(Response.Create()
+                .WithStatusCode(HttpStatusCode.OK)
+                .WithBody(successResponse));
+
+        var stopwatch = Stopwatch.StartNew();
+        var result = await _openAiClient.ChatAsync(CreateChatRequest());
+        stopwatch.Stop();
+
+        // At least 5 seconds should have elapsed
+        stopwatch.Elapsed.Should().BeGreaterThanOrEqualTo(TimeSpan.FromSeconds(5));
+        result.Content.Should().Be("Retry worked!");
     }
 }
