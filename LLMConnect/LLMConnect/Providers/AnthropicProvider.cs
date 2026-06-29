@@ -10,9 +10,9 @@ namespace LLMConnect;
 
 internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions options): ProviderBase, ILLMProvider
 {
-    private readonly IChatRequestValidator _validator = ChatRequestValidatorFactory.Create(options.Provider);
-
     private readonly ILogger<AnthropicProvider>? _logger = options.LoggerFactory?.CreateLogger<AnthropicProvider>();
+    private readonly IChatRequestValidator _validator = ChatRequestValidatorFactory
+        .Create(options.Provider, options.LoggerFactory?.CreateLogger("ChatRequestValidatorFactory"));
 
     public async Task<ChatResponse?> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
