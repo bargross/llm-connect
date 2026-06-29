@@ -1,11 +1,8 @@
-﻿using LLMConnect.Internal;
-using LLMConnect.Settings;
+﻿using LLMConnect.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Polly;
-using System.Threading.RateLimiting;
 
 namespace LLMConnect.Configuration;
 
@@ -15,77 +12,35 @@ namespace LLMConnect.Configuration;
 public static class ServiceCollectionExtensions
 {
 
+
     /// <summary>
-    /// 
+    /// Adds the LLMConnect client to the dependency injection container.
     /// </summary>
-    /// <param name="services"></param>
-    /// <param name="configure"></param>
-    /// <param name="configureResilience"></param>
-    /// <returns></returns>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configure">Optional configuration delegate for <see cref="LLMConnectClientOptions"/>.</param>
+    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddLLMConnect(
         this IServiceCollection services,
-        Action<LLMConnectClientOptions>? configure = null,
-        Action<ResiliencePipelineBuilder<HttpResponseMessage>>? configureResilience = null)
+        Action<LLMConnectClientOptions>? configure = null)
     {
         if (configure != null)
             services.Configure(configure);
         else
-            services.Configure<LLMConnectClientOptions>(_ => { });
-
+            services.Configure<LLMConnectClientOptions>(_ => { }); // creates a new one with default options, validation will handle this.
 
         services.AddHttpClient("LLMConnect")
-             .AddHttpMessageHandler(sp => {
+            .AddHttpMessageHandler(sp =>
+            {
                 var options = sp.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
-
-                 return new RetryDelegatingHandler(options.MaxRetries);
-             })
-             .AddResilienceHandler("LLMConnectRetryPipeline", builder =>
-             {
-                builder.AddRetry(new HttpRetryStrategyOptions
-                {
-                    MaxRetryAttempts = 3,
-                    Delay = TimeSpan.FromSeconds(1),
-                    BackoffType = DelayBackoffType.Exponential,
-                    UseJitter = true,
-                    ShouldHandle = args =>
-                    {
-                        var statusCode = args.Outcome.Result?.StatusCode;
-                        return ValueTask.FromResult(
-                            statusCode >= System.Net.HttpStatusCode.InternalServerError ||
-                            statusCode == System.Net.HttpStatusCode.TooManyRequests ||
-                            args.Outcome.Exception is HttpRequestException);
-                    }
-                });
-
-                builder.AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
-                {
-                    SamplingDuration = TimeSpan.FromSeconds(30),
-                    FailureRatio = 0.5,
-                    MinimumThroughput = 5,
-                    ShouldHandle = args => ValueTask.FromResult(true)
-                });
-
-                builder.AddRateLimiter(new SlidingWindowRateLimiter(
-                    new SlidingWindowRateLimiterOptions
-                    {
-                        PermitLimit = 100,
-                        Window = TimeSpan.FromSeconds(60),
-                        SegmentsPerWindow = 6
-                    }));
-
-                configureResilience?.Invoke(builder);
+                var logger = options.LoggerFactory?.CreateLogger("LLMConnect.Retry");
+                return new RetryDelegatingHandler(options.MaxRetries, logger);
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5)
             });
 
-        services.AddSingleton<ILLMConnectClient>(sp =>
-        {
-            var options = sp.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
-
-            options.LoggerFactory = sp.GetService<ILoggerFactory>();
-
-            var factory = sp.GetRequiredService<IHttpClientFactory>();
-
-            return new LLMConnectClient(options, factory);
-        });
+        services.AddSingleton<ILLMConnectClient, LLMConnectClient>();
 
         return services;
     }

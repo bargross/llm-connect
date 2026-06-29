@@ -1,15 +1,14 @@
-﻿using Polly;
-
-namespace LLMConnect.Internal;
+﻿using LLMConnect;
+using Microsoft.Extensions.Logging;
+using Polly;
 
 internal class RetryDelegatingHandler : DelegatingHandler
 {
-    private readonly int _maxRetries;
+    private readonly ResiliencePipeline<HttpResponseMessage> _pipeline;
 
-    public RetryDelegatingHandler(int maxRetries)
+    public RetryDelegatingHandler(int maxRetries, ILogger? logger = null)
     {
-        _maxRetries = maxRetries;
-
+        _pipeline = RetryPipelineFactory.Create(maxRetries, logger);
         InnerHandler = new SocketsHttpHandler
         {
             PooledConnectionLifetime = TimeSpan.FromMinutes(5)
@@ -18,20 +17,5 @@ internal class RetryDelegatingHandler : DelegatingHandler
 
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
-        CancellationToken cancellationToken)
-    {
-        return await Policy
-            .Handle<HttpRequestException>()
-            .OrResult<HttpResponseMessage>(r =>
-                r.StatusCode == System.Net.HttpStatusCode.TooManyRequests ||
-                (int)r.StatusCode >= 500)
-            .WaitAndRetryAsync(
-                _maxRetries,
-                retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
-                onRetry: (outcome, timespan, retryAttempt, context) =>
-                {
-                    // Log via the logger if available
-                })
-            .ExecuteAsync(() => base.SendAsync(request, cancellationToken));
-    }
+        CancellationToken cancellationToken) => await _pipeline.ExecuteAsync(async (ct) => await base.SendAsync(request, ct), cancellationToken);
 }

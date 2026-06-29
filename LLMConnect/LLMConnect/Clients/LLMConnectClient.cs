@@ -1,5 +1,4 @@
-﻿using LLMConnect.Internal;
-using LLMConnect.Models;
+﻿using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 
@@ -38,7 +37,9 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
     {
         _ownsHttpClient = false;
         _httpClient = httpClient;
-        _logger = options.LoggerFactory?.CreateLogger<LLMConnectClient>();
+
+        if (_logger is null)
+            _logger = options.LoggerFactory?.CreateLogger<LLMConnectClient>();
 
         _logger?.LogWarning(
             "Using a user-supplied HttpClient. Retry logic must be configured by the caller.");
@@ -53,6 +54,9 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
         : this(new LLMProviderFactory(options, httpClientFactory))
     {
         _ownsHttpClient = true;
+
+        if (_logger is null)
+            _logger = options.LoggerFactory?.CreateLogger<LLMConnectClient>();
     }
 
     private LLMConnectClient(ILLMProviderFactory factory)
