@@ -30,5 +30,7 @@ public abstract class Message
         Role = role;
         Content = content;
     }
+
+    public Message() { }
 }
 

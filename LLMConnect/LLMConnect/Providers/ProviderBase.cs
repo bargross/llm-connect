@@ -8,7 +8,7 @@ namespace LLMConnect
 {
     internal abstract class ProviderBase
     {
-        protected async Task<string> ExtractErrorMessage(HttpResponseMessage response, CancellationToken cancellationToken)
+        public async Task<string> ExtractErrorMessage(HttpResponseMessage response, CancellationToken cancellationToken)
         {
             try
             {
@@ -55,7 +55,7 @@ namespace LLMConnect
             }
         }
 
-        protected async Task LogAndThrow(ProviderType providerType, HttpResponseMessage response, ILogger? logger, CancellationToken cancellationToken)
+        public async Task LogAndThrow(ProviderType providerType, HttpResponseMessage response, ILogger? logger, CancellationToken cancellationToken)
         {
             var provider = CultureInfo.InvariantCulture.TextInfo.ToTitleCase(providerType.ToString());
 

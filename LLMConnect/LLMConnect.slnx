@@ -5,5 +5,6 @@
   <Folder Name="/workflows/">
     <File Path="../.github/workflows/dotnet.yml" />
   </Folder>
+  <Project Path="LLMConnect.Tests/LLMConnect.Tests.csproj" Id="fa7bdd09-9119-4ee6-adc6-f016782567cc" />
   <Project Path="LLMConnect/LLMConnect.csproj" />
 </Solution>

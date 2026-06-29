@@ -1,4 +1,5 @@
 ﻿using LLMConnect.Models;
+using Microsoft.Extensions.Logging;
 
 namespace LLMConnect;
 
@@ -12,11 +13,15 @@ internal static class EndpointRegistry
         { ProviderType.Ollama, "http://localhost:{port}/api/chat" }
     };
 
-    public static string GetDefaultEndpoint(ProviderType provider)
+    public static string GetDefaultEndpoint(ProviderType provider, ILogger? logger)
     {
         if (_defaultEndpoints.TryGetValue(provider, out var endpoint))
             return endpoint;
 
-        throw new NotSupportedException($"Provider '{provider}' does not have a default endpoint.");
+        var message = $"Provider '{provider}' does not have a default endpoint.";
+
+        logger?.LogError(message);
+
+        throw new NotSupportedException(message);
     }
 }
