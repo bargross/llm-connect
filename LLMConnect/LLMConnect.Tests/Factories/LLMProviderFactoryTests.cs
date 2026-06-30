@@ -3,9 +3,8 @@ using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Xunit;
 
-namespace LLMConnect.Tests;
+namespace LLMConnect.Tests.Factories;
 
 public class LLMProviderFactoryTests
 {

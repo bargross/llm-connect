@@ -1,7 +1,7 @@
 ﻿using FluentAssertions;
 using LLMConnect.Models;
 
-namespace LLMConnect.Tests;
+namespace LLMConnect.Tests.MappingExtensions;
 
 public class ChatRequestBuilderExtensionsTests
 {

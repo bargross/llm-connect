@@ -3,7 +3,7 @@ using LLMConnect.Models;
 using Microsoft.Extensions.Logging;
 using Moq;
 
-namespace LLMConnect.Tests;
+namespace LLMConnect.Tests.Factories;
 
 public class ChatRequestValidatorFactoryTests
 {

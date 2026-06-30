@@ -5,9 +5,8 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using System.Net;
 using System.Text;
-using Xunit;
 
-namespace LLMConnect.Tests;
+namespace LLMConnect.Tests.Providers;
 
 public class ProviderBaseTests
 {

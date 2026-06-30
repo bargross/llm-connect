@@ -4,9 +4,8 @@ using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 using Moq;
 using System.Net.Http.Headers;
-using Xunit;
 
-namespace LLMConnect.Tests;
+namespace LLMConnect.Tests.Configurators;
 
 public class HttpClientConfiguratorTests
 {

@@ -2,7 +2,7 @@
 using LLMConnect.Models;
 using LLMConnect.Settings;
 
-namespace LLMConnect.Tests;
+namespace LLMConnect.Tests.MappingExtensions;
 
 public class LLMConnectClientOptionsExtensionsTests
 {

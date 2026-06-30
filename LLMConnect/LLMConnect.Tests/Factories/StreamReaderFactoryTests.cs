@@ -4,9 +4,8 @@ using LLMConnect.Settings;
 using LLMConnect.Streams.StreamReaders;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Xunit;
 
-namespace LLMConnect.Tests.Streams.StreamReaders;
+namespace LLMConnect.Tests.Factories;
 
 public class StreamReaderFactoryTests
 {

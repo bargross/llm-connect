@@ -4,7 +4,7 @@ using LLMConnect.Validators.Options;
 using Microsoft.Extensions.Logging;
 using Moq;
 
-namespace LLMConnect.Tests.Validators.Options;
+namespace LLMConnect.Tests.Factories;
 
 public class OptionsValidatorFactoryTests
 {

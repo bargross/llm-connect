@@ -1,6 +1,6 @@
 ﻿using FluentAssertions;
 
-namespace LLMConnect.Tests;
+namespace LLMConnect.Tests.MappingExtensions;
 
 public class ChatResponseMappingExtensionsTests
 {

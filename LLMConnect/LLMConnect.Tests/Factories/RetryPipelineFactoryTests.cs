@@ -2,8 +2,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Polly;
-using Xunit;
 
 namespace LLMConnect.Tests.Factories;
 

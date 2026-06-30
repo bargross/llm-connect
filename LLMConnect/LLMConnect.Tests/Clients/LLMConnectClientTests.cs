@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using System.Reflection;
 
-namespace LLMConnect.Tests;
+namespace LLMConnect.Tests.Clients;
 
 public class LLMConnectClientTests
 {

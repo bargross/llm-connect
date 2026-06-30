@@ -3,18 +3,13 @@ using LLMConnect.Exceptions;
 using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
-using Moq;
-using Moq.Protected;
-using System.Diagnostics;
 using System.Net;
-using System.Reflection.Emit;
 using System.Text;
-using WireMock;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
 using WireMock.Server;
 
-namespace LLMConnect.Tests;
+namespace LLMConnect.Tests.Integration;
 
 /// <summary>
 /// Integration tests that simulate all four LLM providers using WireMock.
