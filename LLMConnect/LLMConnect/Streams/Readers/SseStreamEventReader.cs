@@ -6,12 +6,12 @@ namespace LLMConnect.Streams.StreamReaders;
 
 internal class SseStreamEventReader : IStreamEventReader
 {
-    private readonly ILogger<NdjsonStreamEventReader>? _logger;
+    private readonly ILogger<SseStreamEventReader>? _logger;
 
     public SseStreamEventReader() { }
     public SseStreamEventReader(LLMConnectClientOptions options)
     {
-        _logger = options.LoggerFactory?.CreateLogger<NdjsonStreamEventReader>();
+        _logger = options.LoggerFactory?.CreateLogger<SseStreamEventReader>();
     }
 
     public async IAsyncEnumerable<StreamEvent> ReadEventsAsync(
