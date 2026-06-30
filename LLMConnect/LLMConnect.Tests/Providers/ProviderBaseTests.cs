@@ -22,7 +22,7 @@ public class ProviderBaseTests
     }
 
     [Fact]
-    public async Task ExtractErrorMessage_WithOpenAIErrorFormat_ReturnsMessage()
+    public async Task ExtractErrorMessage_WithErrorObjectContainingMessage_ReturnsMessage()
     {
         // Arrange
         var response = new HttpResponseMessage(HttpStatusCode.BadRequest)
@@ -35,38 +35,6 @@ public class ProviderBaseTests
 
         // Assert
         result.Should().Be("Invalid API key");
-    }
-
-    [Fact]
-    public async Task ExtractErrorMessage_WithAnthropicErrorFormat_ReturnsMessage()
-    {
-        // Arrange
-        var response = new HttpResponseMessage(HttpStatusCode.BadRequest)
-        {
-            Content = new StringContent("""{"error":{"message":"Invalid request"}}""", Encoding.UTF8, "application/json")
-        };
-
-        // Act
-        var result = await _provider.ExtractErrorMessage(response, CancellationToken.None);
-
-        // Assert
-        result.Should().Be("Invalid request");
-    }
-
-    [Fact]
-    public async Task ExtractErrorMessage_WithGoogleErrorFormat_ReturnsMessage()
-    {
-        // Arrange
-        var response = new HttpResponseMessage(HttpStatusCode.BadRequest)
-        {
-            Content = new StringContent("""{"error":{"message":"API key not valid"}}""", Encoding.UTF8, "application/json")
-        };
-
-        // Act
-        var result = await _provider.ExtractErrorMessage(response, CancellationToken.None);
-
-        // Assert
-        result.Should().Be("API key not valid");
     }
 
     [Fact]
