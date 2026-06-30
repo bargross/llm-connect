@@ -168,24 +168,27 @@ public class LLMConnectClientTests
             LoggerFactory = _loggerFactoryMock.Object
         };
         var client = new LLMConnectClient(options);
-        var httpClient = GetPrivateField<HttpClient>(client, "_httpClient");
+        var httpClient = client.HttpClient;
+
         httpClient.Should().NotBeNull();
 
         // Act
         client.Dispose();
 
         // Assert
-        // The HttpClient is disposed; we can check that it throws ObjectDisposedException when used.
+        // Check that the HttpClient is disposed by trying to call a method.
         var disposed = false;
         try
         {
-            // Access a property that throws if disposed
-            var baseAddress = httpClient.BaseAddress;
+            // SendAsync will throw ObjectDisposedException if disposed.
+            httpClient!.SendAsync(new HttpRequestMessage(HttpMethod.Get, "http://example.com"))
+                      .GetAwaiter().GetResult();
         }
         catch (ObjectDisposedException)
         {
             disposed = true;
         }
+
         disposed.Should().BeTrue();
     }
 
@@ -207,7 +210,18 @@ public class LLMConnectClientTests
 
         // Assert
         // The HttpClient should still be usable (not disposed).
-        httpClient.BaseAddress.Should().BeNull(); // No exception thrown
+        // Accessing a property that would throw ObjectDisposedException proves it's still alive.
+        var disposed = false;
+        try
+        {
+            var timeout = httpClient.Timeout; // or .BaseAddress, .DefaultRequestHeaders
+        }
+        catch (ObjectDisposedException)
+        {
+            disposed = true;
+        }
+
+        disposed.Should().BeFalse();
     }
 
     // ---------- Delegation to Provider ----------

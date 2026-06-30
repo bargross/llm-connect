@@ -32,18 +32,10 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectClientOptions opt
             await LogAndThrow(options.Provider, response, _logger, cancellationToken);
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-        var openAiResponse = JsonSerializer.Deserialize<OpenAIChatResponse>(responseJson);
 
-        if (openAiResponse == null)
-        {
-            var exception = new LLMConnectException("OpenAI", "Failed to deserialize response");
+        var openAiResponse = GetResponse<OpenAIChatResponse>(responseJson, _logger, options.Provider);
 
-            _logger?.LogError(exception.Provider, exception.Message, exception);
-
-            throw exception;
-        }
-
-        return openAiResponse.ToChatResponse();
+        return openAiResponse?.ToChatResponse();
     }
 
     public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)

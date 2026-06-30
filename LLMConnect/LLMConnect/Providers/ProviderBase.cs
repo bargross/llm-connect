@@ -1,7 +1,6 @@
 ﻿using LLMConnect.Exceptions;
 using LLMConnect.Models;
 using Microsoft.Extensions.Logging;
-using System.Globalization;
 using System.Text.Json;
 
 namespace LLMConnect
@@ -14,38 +13,34 @@ namespace LLMConnect
             {
                 var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
 
-                // Try to extract "message" from common error formats (OpenAI, Anthropic, Google, etc.)
                 try
                 {
                     using var doc = JsonDocument.Parse(errorJson);
                     var root = doc.RootElement;
 
-                    // Try common error paths
                     if (root.TryGetProperty("error", out var errorObj))
                     {
-                        // OpenAI: { "error": { "message": "..." } }
-                        if (errorObj.TryGetProperty("message", out var message))
-                            return message.GetString() ?? $"HTTP error: {response.StatusCode}";
-
-                        // Anthropic: { "error": { "message": "..." } } (similar to OpenAI)
-                        if (errorObj.TryGetProperty("message", out var message2))
-                            return message2.GetString() ?? $"HTTP error: {response.StatusCode}";
-
-                        // Google: { "error": { "message": "..." } } (similar)
-                        if (errorObj.TryGetProperty("message", out var message3))
-                            return message3.GetString() ?? $"HTTP error: {response.StatusCode}";
+                        // If error is an object, try to get the "message" property
+                        if (errorObj.ValueKind == JsonValueKind.Object)
+                        {
+                            if (errorObj.TryGetProperty("message", out var message))
+                                return message.GetString() ?? $"HTTP error: {response.StatusCode}";
+                        }
+                        // If error is a string, use it directly
+                        else if (errorObj.ValueKind == JsonValueKind.String)
+                        {
+                            return errorObj.GetString() ?? $"HTTP error: {response.StatusCode}";
+                        }
                     }
 
                     // Fallback: try any top-level "message"
                     if (root.TryGetProperty("message", out var topMessage))
                         return topMessage.GetString() ?? $"HTTP error: {response.StatusCode}";
 
-                    // If we can't find a message, return the raw body
                     return $"HTTP error: {response.StatusCode} - {errorJson}";
                 }
                 catch (JsonException)
                 {
-                    // Not JSON — use raw body
                     return $"HTTP error: {response.StatusCode} - {errorJson}";
                 }
             }
@@ -57,7 +52,7 @@ namespace LLMConnect
 
         public async Task LogAndThrow(ProviderType providerType, HttpResponseMessage response, ILogger? logger, CancellationToken cancellationToken)
         {
-            var provider = CultureInfo.InvariantCulture.TextInfo.ToTitleCase(providerType.ToString());
+            var provider = providerType.ToString();
 
             var errorMessage = await ExtractErrorMessage(response, cancellationToken);
 
@@ -66,6 +61,23 @@ namespace LLMConnect
             logger?.LogError(exception.Provider, exception.Message, exception);
 
             throw exception;
+        }
+
+        public TResult? GetResponse<TResult>(string jsonString, ILogger? logger, ProviderType type)
+        {
+            try
+            {
+                return JsonSerializer.Deserialize<TResult>(jsonString);
+            }
+            catch (JsonException ex)
+            {
+                var exception = new LLMConnectException(type.ToString(), "Failed to deserialize response due to: {ex.Message}");
+
+                logger?.LogError(exception.Provider, exception.Message);
+
+                throw exception;
+            }
+
         }
     }
 }

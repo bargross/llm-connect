@@ -9,7 +9,11 @@ internal static class RetryPipelineFactory
 {
     public static ResiliencePipeline<HttpResponseMessage> Create(int maxRetries, ILogger? logger)
     {
-        return new ResiliencePipelineBuilder<HttpResponseMessage>()
+        var builder = new ResiliencePipelineBuilder<HttpResponseMessage>();
+
+        if (maxRetries <= 0) return builder.Build();
+
+        return builder
             .AddRetry(new RetryStrategyOptions<HttpResponseMessage>
             {
                 MaxRetryAttempts = maxRetries,
@@ -33,6 +37,7 @@ internal static class RetryPipelineFactory
                     // Add jitter (±20%)
                     var jitter = Random.Shared.NextDouble() * 0.4 - 0.2; // -20% to +20%
                     var jitteredDelay = delay * (1 + jitter);
+
                     jitteredDelay = TimeSpan.FromMilliseconds(Math.Max(0, jitteredDelay.TotalMilliseconds));
 
                     return ValueTask.FromResult<TimeSpan?>(jitteredDelay);
@@ -58,7 +63,6 @@ internal static class RetryPipelineFactory
 
                     return ValueTask.CompletedTask;
                 }
-            })
-            .Build();
+            }).Build();
     }
 }

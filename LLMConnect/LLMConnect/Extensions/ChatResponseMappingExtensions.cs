@@ -83,8 +83,8 @@ internal static class ChatResponseMappingExtensions
             FinishReason = response.DoneReason,
             Usage = new Usage
             {
-                InputTokens = response.EvalCount ?? 0,
-                OutputTokens = response.PromptEvalCount ?? 0
+                InputTokens = response.PromptEvalCount ?? 0, 
+                OutputTokens = response.EvalCount ?? 0
             },
             Model = response.Model,
             CreatedAt = DateTime.UtcNow

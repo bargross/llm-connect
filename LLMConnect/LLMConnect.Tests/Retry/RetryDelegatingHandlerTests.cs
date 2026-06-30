@@ -4,7 +4,7 @@ using Moq;
 using Moq.Protected;
 using System.Net;
 
-namespace LLMConnect.Tests.Internal;
+namespace LLMConnect.Tests.Retry;
 
 public class RetryDelegatingHandlerTests
 {
@@ -13,19 +13,6 @@ public class RetryDelegatingHandlerTests
     public RetryDelegatingHandlerTests()
     {
         _loggerMock = new Mock<ILogger>();
-    }
-
-    [Fact]
-    public void Constructor_SetsInnerHandlerToSocketsHttpHandlerWithPooledConnectionLifetime()
-    {
-        // Act
-        var handler = new RetryDelegatingHandler(3, _loggerMock.Object);
-
-        // Assert
-        handler.InnerHandler.Should().BeOfType<SocketsHttpHandler>();
-
-        var socketsHandler = (SocketsHttpHandler)handler.InnerHandler;
-        socketsHandler.PooledConnectionLifetime.Should().Be(TimeSpan.FromMinutes(5));
     }
 
     [Fact]
@@ -74,27 +61,24 @@ public class RetryDelegatingHandlerTests
             .Returns<HttpRequestMessage, CancellationToken>((req, ct) =>
             {
                 callCount++;
-                if (callCount <= 3) // maxRetries = 3 -> will try 4 times
-                    throw new HttpRequestException("Simulated transient failure");
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+                throw new HttpRequestException("Simulated transient failure");
             })
             .Verifiable();
 
-        var handler = new RetryDelegatingHandler(3, _loggerMock.Object)
-        {
-            InnerHandler = innerHandlerMock.Object
-        };
+        var handler = new RetryDelegatingHandler(3, _loggerMock.Object);
+        handler.InnerHandler = innerHandlerMock.Object;
 
-        using var client = new HttpClient(handler);
+        using var httpClient = new HttpClient(handler);
         using var request = new HttpRequestMessage(HttpMethod.Get, "http://test.com");
 
         // Act
-        Func<Task> act = async () => await client.SendAsync(request, CancellationToken.None);
+        Func<Task> act = async () => await httpClient.SendAsync(request, CancellationToken.None);
 
-        // Assert: Should throw after 3 retries (4 attempts total)
+        // Assert
         await act.Should().ThrowAsync<HttpRequestException>()
             .WithMessage("Simulated transient failure");
-        callCount.Should().Be(4); // first attempt + 3 retries
+
+        callCount.Should().Be(4); // initial + 3 retries
         innerHandlerMock.Verify();
     }
 
@@ -141,7 +125,7 @@ public class RetryDelegatingHandlerTests
     {
         // Arrange
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        cts.Cancel(); // Cancel the token
 
         var innerHandlerMock = new Mock<HttpMessageHandler>();
         innerHandlerMock
@@ -150,23 +134,16 @@ public class RetryDelegatingHandlerTests
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .Returns<HttpRequestMessage, CancellationToken>((req, ct) =>
-            {
-                ct.ThrowIfCancellationRequested(); // Simulate cancellation handling
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
-            })
-            .Verifiable();
+            .Throws<OperationCanceledException>(); // Simulate cancellation
 
-        var handler = new RetryDelegatingHandler(3, _loggerMock.Object)
-        {
-            InnerHandler = innerHandlerMock.Object
-        };
+        var handler = new RetryDelegatingHandler(3, _loggerMock.Object);
+        handler.InnerHandler = innerHandlerMock.Object;
 
         using var client = new HttpClient(handler);
         using var request = new HttpRequestMessage(HttpMethod.Get, "http://test.com");
 
         // Act
-        Func<Task> act = async () => await client.SendAsync(request, cts.Token);
+        var act = async () => await client.SendAsync(request, cts.Token);
 
         // Assert
         await act.Should().ThrowAsync<OperationCanceledException>();

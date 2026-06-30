@@ -17,19 +17,31 @@ internal class OllamaStreamChunkParser : ChunkParserBase<OllamaStreamChunkParser
         try
         {
             var chunk = JsonSerializer.Deserialize<OllamaStreamChunk>(evt.Data);
-            if (chunk?.Message?.Content is string content && !string.IsNullOrEmpty(content))
+            if (chunk != null)
             {
-                return new ChatChunk
+                // If the chunk has content, yield it
+                if (chunk.Message?.Content is string content && !string.IsNullOrEmpty(content))
                 {
-                    Content = content,
-                    IsComplete = chunk.Done ?? false
-                };
+                    return new ChatChunk
+                    {
+                        Content = content,
+                        IsComplete = chunk.Done ?? false
+                    };
+                }
+                // If the chunk is marked as done, yield a completion chunk
+                if (chunk.Done == true)
+                {
+                    return new ChatChunk
+                    {
+                        Content = string.Empty,
+                        IsComplete = true
+                    };
+                }
             }
         }
         catch (JsonException ex)
         {
             _logger?.LogInformation($"Ignoring malformed chunks, reason: {ex.Message}");
-            // Ignore malformed chunks
         }
 
         return null;

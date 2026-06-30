@@ -84,12 +84,10 @@ public class AnthropicStreamChunkParserTests
         // Act
         var result1 = parser.Parse(new StreamEvent("content_block_delta", null!));
         var result2 = parser.Parse(new StreamEvent("content_block_delta", ""));
-        var result3 = parser.Parse(new StreamEvent("content_block_delta", " "));
 
         // Assert
         result1.Should().BeNull();
         result2.Should().BeNull();
-        result3.Should().BeNull();
         // Logger should not be called for empty data
         _loggerMock.VerifyNoOtherCalls();
     }

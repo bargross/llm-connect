@@ -29,18 +29,10 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions 
             await LogAndThrow(options.Provider, response, _logger, cancellationToken);
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-        var anthropicResponse = JsonSerializer.Deserialize<AnthropicChatResponse>(responseJson);
 
-        if (anthropicResponse == null)
-        {
-            var exception = new LLMConnectException("Anthropic", "Failed to deserialize response");
+        var anthropicChatResponse = GetResponse<AnthropicChatResponse>(responseJson, _logger, options.Provider);
 
-            _logger?.LogError(exception.Provider, exception.Message, exception);
-
-            throw exception;
-        }
-
-        return anthropicResponse.ToChatResponse();
+        return anthropicChatResponse?.ToChatResponse();
     }
 
     public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, [EnumeratorCancellation]  CancellationToken cancellationToken = default)

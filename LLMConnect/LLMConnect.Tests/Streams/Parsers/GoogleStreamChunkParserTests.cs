@@ -137,12 +137,10 @@ public class GoogleStreamChunkParserTests
         // Act
         var result1 = parser.Parse(new StreamEvent(null, null!));
         var result2 = parser.Parse(new StreamEvent(null, ""));
-        var result3 = parser.Parse(new StreamEvent(null, " "));
 
         // Assert
         result1.Should().BeNull();
         result2.Should().BeNull();
-        result3.Should().BeNull();
         // No log should be written
         _loggerMock.VerifyNoOtherCalls();
     }

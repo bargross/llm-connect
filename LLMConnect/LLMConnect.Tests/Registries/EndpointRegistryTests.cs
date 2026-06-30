@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
 
-namespace LLMConnect.Tests.Internal;
+namespace LLMConnect.Tests.Registries;
 
 public class EndpointRegistryTests
 {
@@ -41,7 +41,7 @@ public class EndpointRegistryTests
 
         // Assert
         act.Should().Throw<NotSupportedException>()
-            .WithMessage($"Provider '{unsupportedProvider}' does not have a default endpoint.*");
+            .WithMessage($"Provider '{unsupportedProvider}' is not supported.");
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public class EndpointRegistryTests
             x => x.Log(
                 LogLevel.Error,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains($"Provider '{unsupportedProvider}' does not have a default endpoint.")),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains($"Provider '{unsupportedProvider}' is not supported.")),
                 null,
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);
@@ -95,6 +95,6 @@ public class EndpointRegistryTests
 
         // Assert
         act.Should().Throw<NotSupportedException>()
-            .WithMessage($"Provider '{unsupportedProvider}' does not have a default endpoint.*");
+            .WithMessage($"Provider '{unsupportedProvider}' is not supported.");
     }
 }

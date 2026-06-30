@@ -311,28 +311,6 @@ public class HttpClientConfiguratorTests
     }
 
     [Fact]
-    public void ConfigureForProvider_ClearsExistingHeaders()
-    {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.OpenAI,
-            ApiKey = "test-key",
-            Timeout = TimeSpan.FromSeconds(30),
-            LoggerFactory = _loggerFactoryMock.Object
-        };
-        var client = new HttpClient();
-        client.DefaultRequestHeaders.Add("X-Custom", "value");
-
-        // Act
-        var configuredClient = HttpClientConfigurator.ConfigureForProvider(options, client);
-
-        // Assert
-        configuredClient.DefaultRequestHeaders.Should().NotContainKey("X-Custom");
-        configuredClient.DefaultRequestHeaders.Should().ContainKey("Authorization");
-    }
-
-    [Fact]
     public void ConfigureForProvider_WhenLoggerFactoryIsNull_DoesNotThrow()
     {
         // Arrange

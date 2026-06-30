@@ -40,7 +40,13 @@ public static class ServiceCollectionExtensions
                 PooledConnectionLifetime = TimeSpan.FromMinutes(5)
             });
 
-        services.AddSingleton<ILLMConnectClient, LLMConnectClient>();
+        services.AddSingleton<ILLMConnectClient>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
+            var factory = sp.GetRequiredService<IHttpClientFactory>();
+
+            return new LLMConnectClient(options, factory);
+        });
 
         return services;
     }

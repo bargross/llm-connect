@@ -14,12 +14,12 @@ public class NdjsonStreamEventReaderTests
     public async Task ReadEventsAsync_WithDataPrefix_YieldsCorrectEvents()
     {
         // Arrange
-        var ndjsonData = @"
-            data: {""id"":""1"",""content"":""Hello""}
-            data: {""id"":""2"",""content"":"" world""}
-        ".Trim();
+        var ndjsonContent = """
+        data: {"id":"1","content":"Hello"}
+        data: {"id":"2","content":" world"}
+        """;
 
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(ndjsonData));
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(ndjsonContent));
         var reader = new NdjsonStreamEventReader();
 
         // Act
@@ -37,10 +37,10 @@ public class NdjsonStreamEventReaderTests
     public async Task ReadEventsAsync_WithRawJsonLines_YieldsCorrectEvents()
     {
         // Arrange
-        var ndjsonData = @"
-            {""id"":""1"",""content"":""Hello""}
-            {""id"":""2"",""content"":"" world""}
-        ".Trim();
+        var ndjsonData = """
+        {"id":"1","content":"Hello"}
+        {"id":"2","content":" world"}
+        """;
 
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(ndjsonData));
         var reader = new NdjsonStreamEventReader();
@@ -60,11 +60,11 @@ public class NdjsonStreamEventReaderTests
     public async Task ReadEventsAsync_WithMixedDataPrefixAndRawLines_HandlesBoth()
     {
         // Arrange
-        var ndjsonData = @"
-            data: {""type"":""openai""}
-            {""type"":""ollama""}
-            data: {""type"":""openai2""}
-        ".Trim();
+        var ndjsonData = """
+        data: {"type":"openai"}
+        {"type":"ollama"}
+        data: {"type":"openai2"}
+        """;
 
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(ndjsonData));
         var reader = new NdjsonStreamEventReader();
@@ -83,13 +83,13 @@ public class NdjsonStreamEventReaderTests
     public async Task ReadEventsAsync_WithDoneSentinel_YieldsBreak()
     {
         // Arrange
-        var ndjsonData = @"
-            data: {""id"":""1""}
-            data: [DONE]
-            data: {""id"":""2""}
-        ".Trim();
+        var ndjsonContent = """
+        data: {"id":"1"}
+        data: [DONE]
+        data: {"id":"2"}
+        """;
 
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(ndjsonData));
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(ndjsonContent));
         var reader = new NdjsonStreamEventReader();
 
         // Act
@@ -101,16 +101,16 @@ public class NdjsonStreamEventReaderTests
         events[1].Data.Should().Be("[DONE]");
         // The third line should not be read because the sentinel caused yield break
     }
-
     [Fact]
     public async Task ReadEventsAsync_WithEmptyLines_SkipsThem()
     {
         // Arrange
-        var ndjsonData = @"
-            data: {""id"":""1""}
-            {""id"":""2""}
-        ".TrimStart(); // Keep leading newline
-        
+        var ndjsonData = """
+        data: {"type":"openai"}
+
+        {"type":"ollama"}
+        """;
+
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(ndjsonData));
         var reader = new NdjsonStreamEventReader();
 
@@ -119,8 +119,8 @@ public class NdjsonStreamEventReaderTests
 
         // Assert
         events.Should().HaveCount(2);
-        events[0].Data.Should().Be(@"{""id"":""1""}");
-        events[1].Data.Should().Be(@"{""id"":""2""}");
+        events[0].Data.Should().Be(@"{""type"":""openai""}");
+        events[1].Data.Should().Be(@"{""type"":""ollama""}");
     }
 
     [Fact]

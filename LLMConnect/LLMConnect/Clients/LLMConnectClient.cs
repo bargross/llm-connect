@@ -19,11 +19,18 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
     /// </summary>
     /// <param name="options"></param>
     public LLMConnectClient(LLMConnectClientOptions options)
-        : this(options, new HttpClient(new RetryDelegatingHandler(options.MaxRetries, options.LoggerFactory?.CreateLogger<RetryDelegatingHandler>())))
+        : this(options, new HttpClient(new RetryDelegatingHandler(options.MaxRetries, options.LoggerFactory?.CreateLogger<RetryDelegatingHandler>())
+        {
+            InnerHandler = new SocketsHttpHandler
+            {
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5)
+            }
+        }))
     {
         _ownsHttpClient = true;
 
-        _logger = options.LoggerFactory?.CreateLogger<LLMConnectClient>();
+        if (_logger is null)
+            _logger = options.LoggerFactory?.CreateLogger<LLMConnectClient>();
     }
 
 
@@ -99,4 +106,6 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
             _httpClient?.Dispose();
         }
     }
+
+    internal HttpClient HttpClient => _httpClient;
 }

@@ -18,7 +18,7 @@ internal static class EndpointRegistry
         if (_defaultEndpoints.TryGetValue(provider, out var endpoint))
             return endpoint;
 
-        var message = $"Provider '{provider}' does not have a default endpoint.";
+        var message = $"Provider '{provider}' is not supported.";
 
         logger?.LogError(message);
 

@@ -14,13 +14,13 @@ public class SseStreamEventReaderTests
     public async Task ReadEventsAsync_WithEventAndData_YieldsCorrectEvents()
     {
         // Arrange
-        var sseData = @"
-            event: content_block_delta
-            data: {""delta"":{""text"":""Hello""}}
+        var sseData = """
+        event: content_block_delta
+        data: {"delta":{"text":"Hello"}}
 
-            event: content_block_delta
-            data: {""delta"":{""text"":"" world""}}
-        ".Trim();
+        event: content_block_delta
+        data: {"delta":{"text":" world"}}
+        """;
 
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
         var reader = new SseStreamEventReader();
@@ -60,16 +60,17 @@ public class SseStreamEventReaderTests
     public async Task ReadEventsAsync_WithMultipleEvents_YieldsAll()
     {
         // Arrange
-        var sseData = @"
-            event: message_start
-            data: {""id"":""msg_123""}
+        var sseData = """
+        event: message_start
+        data: {"id":"msg_123"}
 
-            event: content_block_delta
-            data: {""delta"":{""text"":""Hello""}}
+        event: content_block_delta
+        data: {"delta":{"text":"Hello"}}
 
-            event: message_stop
-            data: {}
-        ".Trim();
+        event: message_stop
+        data: {}
+        """;
+
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
         var reader = new SseStreamEventReader();
 
@@ -90,12 +91,12 @@ public class SseStreamEventReaderTests
     public async Task ReadEventsAsync_WithDoneSentinel_YieldsBreak()
     {
         // Arrange
-        var sseData = @"
-            event: message_start
-            data: {""id"":""msg_123""}
+        var sseData = """
+        event: message_start
+        data: {"id":"msg_123"}
 
-            data: [DONE]
-        ".Trim();
+        data: [DONE]
+        """;
 
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
         var reader = new SseStreamEventReader();
@@ -107,7 +108,7 @@ public class SseStreamEventReaderTests
         events.Should().HaveCount(2);
         events[0].EventName.Should().Be("message_start");
         events[0].Data.Should().Be(@"{""id"":""msg_123""}");
-        events[1].EventName.Should().Be("message_start"); // event name is carried over? Actually after the break it yields the sentinel event.
+        events[1].EventName.Should().BeNull(); // event name is carried over? Actually after the break it yields the sentinel event.
         events[1].Data.Should().Be("[DONE]");
     }
 
@@ -167,10 +168,11 @@ public class SseStreamEventReaderTests
     public async Task ReadEventsAsync_WithEmptyLines_SkipsThem()
     {
         // Arrange
-        var sseData = @"
-            event: test
-            data: 123
-        ".TrimStart(); // Keep leading newline
+        var sseData = """
+        event: test
+        data: 123
+
+        """;
 
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
         var reader = new SseStreamEventReader();
@@ -188,11 +190,11 @@ public class SseStreamEventReaderTests
     public async Task ReadEventsAsync_WithInvalidLines_Ignores()
     {
         // Arrange
-        var sseData = @"
-            invalid: line
-            event: test
-            data: 123
-        ".Trim();
+        var sseData = """
+        invalid: line
+        event: test
+        data: 123
+        """;
 
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
         var reader = new SseStreamEventReader();

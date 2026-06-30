@@ -2,12 +2,13 @@
 
 namespace LLMConnect;
 
-internal static class ChatRequestBuilderExtensions
+internal static class ChatRequestMappingExtensions
 {
     internal static OpenAIChatRequest ToOpenAIRequest(this ChatRequest request, string? defaultModel = null)
     {
         var messages = new List<OpenAIMessage>();
 
+        // Add system prompt if provided (this will be the only system message)
         if (!string.IsNullOrWhiteSpace(request.SystemPrompt))
         {
             messages.Add(new OpenAIMessage { Role = MessageRole.System.ToString().ToLower(), Content = request.SystemPrompt });
@@ -15,7 +16,11 @@ internal static class ChatRequestBuilderExtensions
 
         foreach (var msg in request.Messages)
         {
-            switch(msg.Role)
+            // Skip system messages if SystemPrompt is already set (to avoid duplicates)
+            if (msg.Role == MessageRole.System && !string.IsNullOrWhiteSpace(request.SystemPrompt))
+                continue;
+
+            switch (msg.Role)
             {
                 case MessageRole.Assistant:
                     messages.Add(new OpenAIMessage { Role = "assistant", Content = msg.Content });
@@ -32,7 +37,7 @@ internal static class ChatRequestBuilderExtensions
             }
         }
 
-        var model = request.Model ?? defaultModel; 
+        var model = request.Model ?? defaultModel;
 
         var openAiRequest = new OpenAIChatRequest
         {
@@ -49,9 +54,8 @@ internal static class ChatRequestBuilderExtensions
             User = request.User
         };
 
-        // Merge extra parameters
         if (request.ExtraParameters != null && request.ExtraParameters.Count > 0)
-            openAiRequest.ExtraData = new Dictionary<string, object>(request.ExtraParameters); 
+            openAiRequest.ExtraData = new Dictionary<string, object>(request.ExtraParameters);
 
         return openAiRequest;
     }

@@ -89,11 +89,14 @@ internal abstract class LLMConnectOptionsValidationBase
             case ProviderType.Anthropic:
             case ProviderType.OpenAI:
             case ProviderType.Google:
-                var errorMessage = $"Missing api key for provider {options.Provider.ToString()}";
-                logger?.LogError(errorMessage);
-
                 if (string.IsNullOrWhiteSpace(options.ApiKey))
+                {
+                    var errorMessage = $"Missing api key for provider {options.Provider.ToString()}";
+
+                    logger?.LogError(errorMessage);
+                    
                     throw new ArgumentException(errorMessage);
+                }
 
                 break;
         }

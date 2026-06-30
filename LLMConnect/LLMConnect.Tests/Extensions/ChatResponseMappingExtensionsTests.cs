@@ -431,8 +431,8 @@ public class ChatResponseMappingExtensionsTests
         result.Content.Should().Be("Hello, world!");
         result.FinishReason.Should().Be("stop");
         result.Model.Should().Be("llama3.2");
-        result.Usage.InputTokens.Should().Be(10); // EvalCount maps to InputTokens
-        result.Usage.OutputTokens.Should().Be(5); // PromptEvalCount maps to OutputTokens
+        result.Usage.InputTokens.Should().Be(5); // EvalCount maps to InputTokens
+        result.Usage.OutputTokens.Should().Be(10); // PromptEvalCount maps to OutputTokens
         result.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
     }
 

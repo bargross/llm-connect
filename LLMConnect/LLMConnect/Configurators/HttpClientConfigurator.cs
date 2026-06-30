@@ -13,7 +13,12 @@ internal static class HttpClientConfigurator
         client.BaseAddress = new Uri(endpoint);
         client.Timeout = options.Timeout;
 
-        client.DefaultRequestHeaders.Clear();
+        // Remove only the headers we will set, so user-provided headers (like User-Agent) are preserved
+        client.DefaultRequestHeaders.Remove("Authorization");
+        client.DefaultRequestHeaders.Remove("Accept");
+        client.DefaultRequestHeaders.Remove("x-api-key");
+        client.DefaultRequestHeaders.Remove("anthropic-version");
+        client.DefaultRequestHeaders.Remove("x-goog-api-key");
 
         switch (options.Provider)
         {
@@ -33,13 +38,15 @@ internal static class HttpClientConfigurator
                 client.DefaultRequestHeaders.Add("Accept", "application/json");
                 break;
 
-            case ProviderType.Ollama: // No authentication required
+            case ProviderType.Ollama:
+                // No authentication required
                 break;
 
             default:
                 throw new NotSupportedException($"Provider '{options.Provider}' is not supported.");
         }
 
+        // Only add the default User-Agent if the user hasn't set one already
         if (!client.DefaultRequestHeaders.UserAgent.Any())
         {
             client.DefaultRequestHeaders.UserAgent.Add(

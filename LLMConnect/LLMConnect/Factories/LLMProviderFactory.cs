@@ -1,6 +1,7 @@
 ﻿using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace LLMConnect;
 
@@ -12,8 +13,8 @@ internal class LLMProviderFactory
 
     public LLMProviderFactory(LLMConnectClientOptions options, HttpClient httpClient)
     {
-        _providedClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _providedClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
 
         _logger = options.LoggerFactory?.CreateLogger<LLMProviderFactory>();
 
@@ -22,8 +23,8 @@ internal class LLMProviderFactory
 
     public LLMProviderFactory(LLMConnectClientOptions options, IHttpClientFactory httpClientFactory)
     {
-        _providedClient = httpClientFactory?.CreateClient("LLMConnect") ?? throw new InvalidOperationException("Failed to create HttpClient from factory.");
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _providedClient = httpClientFactory?.CreateClient("LLMConnect") ?? throw new InvalidOperationException("Failed to create HttpClient from factory.");
 
         _logger = options.LoggerFactory?.CreateLogger<LLMProviderFactory>();
 
@@ -34,20 +35,12 @@ internal class LLMProviderFactory
     {
         var configuredClient = HttpClientConfigurator.ConfigureForProvider(_options, _providedClient);
 
-        switch (_options.Provider)
+        return _options.Provider switch
         {
-            case ProviderType.OpenAI: return (configuredClient, new OpenAIProvider(configuredClient, _options));
-            case ProviderType.Anthropic: return (configuredClient, new AnthropicProvider(configuredClient, _options));
-            case ProviderType.Google: return (configuredClient, new GoogleProvider(configuredClient, _options));
-            case ProviderType.Ollama: return (configuredClient, new OllamaProvider(configuredClient, _options));
-            default:
-            {
-                var message = $"Provider '{_options.Provider}' is not supported.";
-
-                _logger?.LogError(message);
-
-                throw new NotSupportedException(message);
-            }
-        }
+            ProviderType.OpenAI => (configuredClient, new OpenAIProvider(configuredClient, _options)),
+            ProviderType.Anthropic => (configuredClient, new AnthropicProvider(configuredClient, _options)),
+            ProviderType.Google => (configuredClient, new GoogleProvider(configuredClient, _options)),
+            ProviderType.Ollama => (configuredClient, new OllamaProvider(configuredClient, _options)),
+        };
     }
 }

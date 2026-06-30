@@ -47,12 +47,17 @@ public class ChatRequestBuilderExtensionsTests
         result.Should().NotBeNull();
         result.Model.Should().Be("custom-model");
         result.Messages.Should().HaveCount(3);
-        result.Messages[0].Role.Should().Be("user");
-        result.Messages[0].Content.Should().Be("Hello");
-        result.Messages[1].Role.Should().Be("assistant");
-        result.Messages[1].Content.Should().Be("Hi there");
-        result.Messages[2].Role.Should().Be("system");
-        result.Messages[2].Content.Should().Be("You are a helpful assistant.");
+
+        // Order: System prompt from SystemPrompt property comes first
+        result.Messages[0].Role.Should().Be("system");
+        result.Messages[0].Content.Should().Be("System prompt override");
+
+        // Then the messages from the Messages list (excluding system messages)
+        result.Messages[1].Role.Should().Be("user");
+        result.Messages[1].Content.Should().Be("Hello");
+        result.Messages[2].Role.Should().Be("assistant");
+        result.Messages[2].Content.Should().Be("Hi there");
+
         result.Temperature.Should().Be(0.8f);
         result.TopP.Should().Be(0.95f);
         result.MaxTokens.Should().Be(150);
@@ -451,7 +456,7 @@ public class ChatRequestBuilderExtensionsTests
     public void MapToOpenAIRole_ReturnsCorrectString(MessageRole role, string expected)
     {
         // Act
-        var result = ChatRequestBuilderExtensions.MapToOpenAIRole(role);
+        var result = ChatRequestMappingExtensions.MapToOpenAIRole(role);
 
         // Assert
         result.Should().Be(expected);
@@ -465,7 +470,7 @@ public class ChatRequestBuilderExtensionsTests
     public void MapToAnthropicRole_ReturnsCorrectString(MessageRole role, string expected)
     {
         // Act
-        var result = ChatRequestBuilderExtensions.MapToAnthropicRole(role);
+        var result = ChatRequestMappingExtensions.MapToAnthropicRole(role);
 
         // Assert
         result.Should().Be(expected);
@@ -479,7 +484,7 @@ public class ChatRequestBuilderExtensionsTests
     public void MapToGoogleRole_ReturnsCorrectString(MessageRole role, string expected)
     {
         // Act
-        var result = ChatRequestBuilderExtensions.MapToGoogleRole(role);
+        var result = ChatRequestMappingExtensions.MapToGoogleRole(role);
 
         // Assert
         result.Should().Be(expected);
@@ -493,7 +498,7 @@ public class ChatRequestBuilderExtensionsTests
     public void MapToOllamaRole_ReturnsCorrectString(MessageRole role, string expected)
     {
         // Act
-        var result = ChatRequestBuilderExtensions.MapToOllamaRole(role);
+        var result = ChatRequestMappingExtensions.MapToOllamaRole(role);
 
         // Assert
         result.Should().Be(expected);
@@ -503,7 +508,7 @@ public class ChatRequestBuilderExtensionsTests
     public void MapToOpenAIRole_WithInvalidRole_ThrowsArgumentOutOfRangeException()
     {
         // Act
-        Action act = () => ChatRequestBuilderExtensions.MapToOpenAIRole((MessageRole)999);
+        Action act = () => ChatRequestMappingExtensions.MapToOpenAIRole((MessageRole)999);
 
         // Assert
         act.Should().Throw<ArgumentOutOfRangeException>()
@@ -514,7 +519,7 @@ public class ChatRequestBuilderExtensionsTests
     public void MapToAnthropicRole_WithInvalidRole_ThrowsArgumentOutOfRangeException()
     {
         // Act
-        Action act = () => ChatRequestBuilderExtensions.MapToAnthropicRole((MessageRole)999);
+        Action act = () => ChatRequestMappingExtensions.MapToAnthropicRole((MessageRole)999);
 
         // Assert
         act.Should().Throw<ArgumentOutOfRangeException>()
@@ -525,7 +530,7 @@ public class ChatRequestBuilderExtensionsTests
     public void MapToGoogleRole_WithInvalidRole_ThrowsArgumentOutOfRangeException()
     {
         // Act
-        Action act = () => ChatRequestBuilderExtensions.MapToGoogleRole((MessageRole)999);
+        Action act = () => ChatRequestMappingExtensions.MapToGoogleRole((MessageRole)999);
 
         // Assert
         act.Should().Throw<ArgumentOutOfRangeException>()
@@ -536,7 +541,7 @@ public class ChatRequestBuilderExtensionsTests
     public void MapToOllamaRole_WithInvalidRole_ThrowsArgumentOutOfRangeException()
     {
         // Act
-        Action act = () => ChatRequestBuilderExtensions.MapToOllamaRole((MessageRole)999);
+        Action act = () => ChatRequestMappingExtensions.MapToOllamaRole((MessageRole)999);
 
         // Assert
         act.Should().Throw<ArgumentOutOfRangeException>()

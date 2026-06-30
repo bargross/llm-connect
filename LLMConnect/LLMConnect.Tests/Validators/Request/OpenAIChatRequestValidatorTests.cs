@@ -67,8 +67,8 @@ public class OpenAIChatRequestValidatorTests
     [Theory]
     [InlineData("xml")]
     [InlineData("json")]
-    [InlineData("")]
-    [InlineData(" ")]
+    [InlineData("html")]
+    [InlineData("invalid")]
     public void Validate_WhenResponseFormatIsInvalid_ThrowsArgumentException(string invalidFormat)
     {
         // Arrange

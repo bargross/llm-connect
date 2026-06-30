@@ -49,7 +49,7 @@ public class ServiceCollectionExtensionsTests
 
         // Assert
         options.Provider.Should().Be(ProviderType.OpenAI); // Default
-        options.ApiKey.Should().BeNull();
+        options.ApiKey.Should().Be(string.Empty); // Default
         options.MaxRetries.Should().Be(3); // Default
         options.Timeout.Should().Be(TimeSpan.FromSeconds(60)); // Default
     }
@@ -66,8 +66,8 @@ public class ServiceCollectionExtensionsTests
         // Assert
         var descriptor = services.Should().ContainSingle(sd =>
             sd.ServiceType == typeof(ILLMConnectClient) &&
-            sd.ImplementationType == typeof(LLMConnectClient) &&
-            sd.Lifetime == ServiceLifetime.Singleton);
+            sd.Lifetime == ServiceLifetime.Singleton &&
+            sd.ImplementationFactory != null);
         descriptor.Should().NotBeNull();
     }
 
@@ -78,34 +78,28 @@ public class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
 
         // Act
-        services.AddLLMConnect();
+        services.AddLLMConnect(options =>
+        {
+            options.Provider = ProviderType.OpenAI;
+            options.ApiKey = "valid-test-key";
+            options.MaxRetries = 3;
+        });
 
-        // Assert: There should be an HttpClientFactory registration for the named client
-        var httpClientDescriptor = services.Should().ContainSingle(sd =>
-            sd.ServiceType == typeof(IHttpClientFactory) &&
-            sd.Lifetime == ServiceLifetime.Singleton);
-        httpClientDescriptor.Should().NotBeNull();
+        // Build the service provider
+        var provider = services.BuildServiceProvider();
 
-        // We can also check that the named client is configured by resolving a client
-        var serviceProvider = services.BuildServiceProvider();
-        var factory = serviceProvider.GetRequiredService<IHttpClientFactory>();
-        var client = factory.CreateClient("LLMConnect");
-
-        // Assert that the client has the expected timeout (configured in the primary handler)
-        // We can't easily inspect the handler chain from here, but we can verify the client is not null.
+        // Assert
+        // 1. The client can be resolved
+        var client = provider.GetService<ILLMConnectClient>();
         client.Should().NotBeNull();
 
-        // Additionally, we can verify that a service descriptor for the named client's handlers exists.
-        // In .NET, named HttpClient configuration is stored as a transient service in the container.
-        // We can look for the specific registration of the retry handler.
-        var retryHandlerDescriptor = services.Should().Contain(sd =>
-            sd.ServiceType == typeof(RetryDelegatingHandler) &&
-            sd.Lifetime == ServiceLifetime.Transient);
-        // Depending on how the extension registers, it might not be directly registered as a service.
-        // But we can check that the HttpClientBuilder was configured with a message handler.
-        // We'll simplify: resolve the client and check its BaseAddress.
-        // The BaseAddress is set in HttpClientConfigurator, which is called when the client is used.
-        // We won't test that here; we'll just ensure the client exists.
+        // 2. The HttpClientFactory is registered
+        var factory = provider.GetService<IHttpClientFactory>();
+        factory.Should().NotBeNull();
+
+        // 3. The named client can be created (ensures the handler chain is configured)
+        using var httpClient = factory.CreateClient("LLMConnect");
+        httpClient.Should().NotBeNull();
     }
 
     [Fact]

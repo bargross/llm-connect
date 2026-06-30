@@ -5,7 +5,7 @@ using Moq;
 using Polly;
 using Xunit;
 
-namespace LLMConnect.Tests.Internal;
+namespace LLMConnect.Tests.Factories;
 
 public class RetryPipelineFactoryTests
 {
@@ -68,7 +68,7 @@ public class RetryPipelineFactoryTests
             x => x.Log(
                 LogLevel.Warning,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Retry 1 after")),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Retry 0 after")),
                 It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);
@@ -76,7 +76,7 @@ public class RetryPipelineFactoryTests
             x => x.Log(
                 LogLevel.Warning,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Retry 2 after")),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Retry 1 after")),
                 It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);
@@ -106,7 +106,7 @@ public class RetryPipelineFactoryTests
             x => x.Log(
                 LogLevel.Warning,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Retry 1 after")),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Retry 0 after")),
                 It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);
@@ -114,7 +114,7 @@ public class RetryPipelineFactoryTests
             x => x.Log(
                 LogLevel.Warning,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Retry 2 after")),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Retry 1 after")),
                 It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);
@@ -146,7 +146,7 @@ public class RetryPipelineFactoryTests
             x => x.Log(
                 LogLevel.Warning,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Retry 1 after")),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Retry 0 after")),
                 It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);
@@ -154,7 +154,7 @@ public class RetryPipelineFactoryTests
             x => x.Log(
                 LogLevel.Warning,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Retry 2 after")),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Retry 1 after")),
                 It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);
@@ -240,7 +240,7 @@ public class RetryPipelineFactoryTests
             x => x.Log(
                 LogLevel.Warning,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Retry 1 after")),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Retry 0 after")),
                 It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);
@@ -248,7 +248,7 @@ public class RetryPipelineFactoryTests
             x => x.Log(
                 LogLevel.Warning,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Retry 2 after")),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Retry 1 after")),
                 It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Never);

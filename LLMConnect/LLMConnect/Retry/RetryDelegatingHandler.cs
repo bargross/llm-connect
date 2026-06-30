@@ -9,10 +9,6 @@ internal class RetryDelegatingHandler : DelegatingHandler
     public RetryDelegatingHandler(int maxRetries, ILogger? logger = null)
     {
         _pipeline = RetryPipelineFactory.Create(maxRetries, logger);
-        InnerHandler = new SocketsHttpHandler
-        {
-            PooledConnectionLifetime = TimeSpan.FromMinutes(5)
-        };
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(

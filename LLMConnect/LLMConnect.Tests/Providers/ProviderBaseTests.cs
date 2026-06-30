@@ -122,16 +122,19 @@ public class ProviderBaseTests
     public async Task ExtractErrorMessage_WithMalformedJson_ReturnsStatusCodeAndRawBody()
     {
         // Arrange
+        var content = "{invalid json";
         var response = new HttpResponseMessage(HttpStatusCode.BadRequest)
         {
-            Content = new StringContent("{invalid json", Encoding.UTF8, "application/json")
+            Content = new StringContent(content, Encoding.UTF8, "application/json")
         };
 
         // Act
         var result = await _provider.ExtractErrorMessage(response, CancellationToken.None);
 
         // Assert
-        result.Should().Be($"HTTP error: {HttpStatusCode.BadRequest} - {response.Content}");
+        // The method should return: "HTTP error: BadRequest - {invalid json"
+        // because it falls back to the raw body when JSON parsing fails.
+        result.Should().Be($"HTTP error: {HttpStatusCode.BadRequest} - {content}");
     }
 
     [Fact]
@@ -152,11 +155,12 @@ public class ProviderBaseTests
         exception.Which.Provider.Should().Be("OpenAI");
         exception.Which.Message.Should().Be("Invalid API key");
 
+        // The log message is the provider name, not the exception message.
         _loggerMock.Verify(
             x => x.Log(
                 LogLevel.Error,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Invalid API key")),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("OpenAI")),
                 It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);

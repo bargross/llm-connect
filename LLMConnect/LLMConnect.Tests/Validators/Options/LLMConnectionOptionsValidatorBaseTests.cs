@@ -288,7 +288,7 @@ public class LLMConnectOptionsValidationBaseTests
         var options = new LLMConnectClientOptions
         {
             Provider = ProviderType.OpenAI,
-            ApiKey = "valid-key",
+            ApiKey = "valid-api-key",
             Timeout = TimeSpan.FromSeconds(30),
             MaxRetries = 3,
             Endpoint = "https://api.openai.com/v1"

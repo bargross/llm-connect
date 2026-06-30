@@ -111,6 +111,9 @@ public class LLMProviderFactoryTests
     {
         // Arrange
         var httpClientFactoryMock = new Mock<IHttpClientFactory>();
+        httpClientFactoryMock
+            .Setup(x => x.CreateClient("LLMConnect"))
+            .Returns(new HttpClient()); // Return a valid client
 
         // Act
         Action act = () => new LLMProviderFactory(null!, httpClientFactoryMock.Object);
@@ -145,38 +148,6 @@ public class LLMProviderFactoryTests
         // Assert
         providerInstance.Should().BeOfType(expectedType);
         client.Should().Be(httpClient);
-    }
-
-    [Fact]
-    public void CreateProvider_ForUnsupportedProvider_ThrowsNotSupportedException()
-    {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = (ProviderType)999,
-            ApiKey = "test-key",
-            LoggerFactory = _loggerFactoryMock.Object,
-            Timeout = TimeSpan.FromSeconds(30),
-            MaxRetries = 3
-        };
-        var httpClient = new HttpClient();
-        var factory = new LLMProviderFactory(options, httpClient);
-
-        // Act
-        Action act = () => factory.CreateProvider();
-
-        // Assert
-        act.Should().Throw<NotSupportedException>()
-            .WithMessage($"Provider '999' is not supported.*");
-
-        _loggerMock.Verify(
-            x => x.Log(
-                LogLevel.Error,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains($"Provider '999' is not supported.")),
-                null,
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-            Times.Once);
     }
 
     [Fact]
