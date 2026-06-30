@@ -1,4 +1,4 @@
-[![NuGet Version](https://img.shields.io/nuget/v/llm-connect)](https://www.nuget.org/packages/llm-connect/)
+[![NuGet Version](https://img.shields.io/nuget/v/LLMConnect)](https://www.nuget.org/packages/LLMConnect/)
 [![.NET](https://img.shields.io/badge/.NET-10.0-blue)](https://dotnet.microsoft.com/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/bargross/llm-connect/dotnet.yml?branch=main)](https://github.com/bargross/llm-connect/actions)
