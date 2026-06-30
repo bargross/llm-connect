@@ -1,5 +1,4 @@
-﻿using LLMConnect.Exceptions;
-using LLMConnect.Models;
+﻿using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
