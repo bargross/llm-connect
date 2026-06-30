@@ -7,7 +7,7 @@ using Microsoft.Extensions.Options;
 namespace LLMConnect.Configuration;
 
 /// <summary>
-/// 
+/// Extension class for .NET DI serviceCollection at startup for service configuration
 /// </summary>
 public static class ServiceCollectionExtensions
 {

@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/Docs/">
     <File Path="../README.md" />
+    <File Path=".gitignore" />
   </Folder>
   <Folder Name="/workflows/">
     <File Path="../.github/workflows/dotnet.yml" />

@@ -9,10 +9,10 @@
   <PropertyGroup>
     <PackageId>LLMConnect</PackageId>
     <Version>1.0.0</Version>
-    <Authors>YourName</Authors>
-    <Description>Provider-agnostic .NET client for LLMs</Description>
-    <PackageTags>llm;openai;anthropic;google;ollama;chat</PackageTags>
-    <RepositoryUrl>https://github.com/yourusername/LLMConnect</RepositoryUrl>
+    <Authors>Leonardo H. Mengesha</Authors>
+    <Description>A provider-agnostic .NET client for Large Language Models. One API for OpenAI, Anthropic, Google Gemini, and local Ollama. Full async, streaming, and DI support.</Description>
+    <PackageTags>llm;openai;anthropic;google;ollama;chat;llms;llm-chat</PackageTags>
+    <RepositoryUrl>https://github.com/bargross/llm-connect</RepositoryUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>

@@ -189,6 +189,61 @@ public class ChatRequest
 }
 ```
 
+## Properties
+
+| Property | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `Messages` | `List<Message>` | `new()` | **Required.** The conversation history. Must contain at least one message. Each message has a `Role` (System, User, Assistant, Tool) and `Content`. |
+| `SystemPrompt` | `string?` | `null` | The system instruction that defines the assistant's behavior, personality, and constraints. Overrides any system messages in the `Messages` list. |
+| `Temperature` | `float` | `0.7f` | Controls randomness. Lower values (e.g., 0.2) make output more deterministic and focused. Higher values (e.g., 0.8) make output more creative and diverse. Range: 0.0 – 1.0. |
+| `TopP` | `float` | `0.9f` | Nucleus sampling. The model considers the smallest set of tokens whose cumulative probability exceeds `TopP`. Use with `Temperature` for fine-tuned control. Range: 0.0 – 1.0. |
+| `MaxTokens` | `int` | `1024` | The maximum number of tokens to generate in the response. This includes both input and output tokens for some providers. |
+| `Model` | `string?` | `null` | The model to use. If `null`, falls back to the `DefaultModel` set in `LLMClientOptions`. Provider-specific examples: `"gpt-4"`, `"claude-3-5-sonnet-20241022"`, `"gemini-2.0-flash"`, `"llama3.2"`. |
+| `Provider` | `string?` | `null` | Override the default provider for this request only. If `null`, uses the `Provider` from `LLMClientOptions`. |
+| `StopSequences` | `List<string>?` | `null` | Stop generation when one of these strings is encountered. The generated text will not include the stop sequence. |
+| `FrequencyPenalty` | `float?` | `null` | Penalizes repeated tokens. Positive values decrease the likelihood of repeating the same token. Range: -2.0 – 2.0. |
+| `PresencePenalty` | `float?` | `null` | Penalizes tokens that have already appeared in the conversation. Positive values encourage the model to discuss new topics. Range: -2.0 – 2.0. |
+| `ResponseFormat` | `string?` | `null` | Controls the response format. Supported values: `"text"` (default) or `"json_object"` (forces valid JSON output). Provider support varies. |
+| `Seed` | `int?` | `null` | For deterministic generation. The same seed + same parameters produces the same output (when supported by the provider). |
+| `User` | `string?` | `null` | A unique identifier for the end-user. Used for abuse monitoring and usage tracking (e.g., OpenAI). |
+| `ExtraParameters` | `Dictionary<string, object>?` | `null` | A flexible dictionary for provider-specific parameters. Useful for advanced features not yet supported natively (e.g., `"top_k"` for Ollama). |
+
+---
+
+## Provider Compatibility
+
+| Parameter | OpenAI | Anthropic | Google | Ollama |
+| :--- | :--- | :--- | :--- | :--- |
+| `Messages` | ✅ | ✅ | ✅ | ✅ |
+| `SystemPrompt` | ✅ | ✅ (top-level `system`) | ✅ (`systemInstruction`) | ✅ (as a `system` message) |
+| `Temperature` | ✅ | ✅ | ✅ | ✅ |
+| `TopP` | ✅ | ✅ | ✅ | ✅ |
+| `MaxTokens` | ✅ | ✅ | ✅ (`maxOutputTokens`) | ✅ (`numPredict`) |
+| `Model` | ✅ | ✅ | ✅ | ✅ |
+| `Provider` | ✅ | ✅ | ✅ | ✅ |
+| `StopSequences` | ✅ | ✅ | ❌ (use `ExtraParameters`) | ✅ (`stop`) |
+| `FrequencyPenalty` | ✅ | ❌ | ❌ | ❌ (handled via `ExtraParameters`) |
+| `PresencePenalty` | ✅ | ❌ | ❌ | ❌ (handled via `ExtraParameters`) |
+| `ResponseFormat` | ✅ | ❌ (warning logged) | ❌ (warning logged) | ❌ (warning logged) |
+| `Seed` | ✅ | ❌ (warning logged) | ❌ (warning logged) | ❌ (warning logged) |
+| `User` | ✅ | ❌ | ❌ | ❌ |
+| `ExtraParameters` | ✅ | ✅ | ✅ | ✅ |
+
+---
+
+## Validation Rules
+
+| Rule | Description |
+| :--- | :--- |
+| `Messages` must not be empty | At least one message is required. Throws `ArgumentException` if empty. |
+| `Temperature` must be between 0.0 and 1.0 | Throws `ArgumentException` if out of range. |
+| `MaxTokens` must be greater than 0 | Throws `ArgumentException` if less than 1. |
+| `StopSequences` cannot contain empty or whitespace strings | Throws `ArgumentException` if any sequence is empty or whitespace. |
+| `ResponseFormat` must be `"text"` or `"json_object"` | Only validated for OpenAI. For other providers, a warning is logged. |
+| `Seed` must be non-negative | Only validated for OpenAI. For other providers, a warning is logged. |
+
+---
+
 Notes:
 
 - `Model` overrides `LLMConnectClientOptions.DefaultModel` for a single request.
@@ -211,6 +266,41 @@ public class ChatResponse
 }
 ```
 
+## Properties
+
+| Property | Type | Description |
+| :--- | :--- | :--- |
+| `Content` | `string?` | The generated response text from the assistant. May be `null` if the response is empty or if an error occurred. |
+| `FinishReason` | `string?` | The reason why the generation stopped. Common values: `"stop"` (natural stop), `"length"` (max tokens reached), `"content_filter"` (blocked), `"tool_calls"`, etc. Provider-specific values may vary. |
+| `Usage` | `Usage` | Token usage statistics for the request. Includes input tokens, output tokens, and total tokens. |
+| `Model` | `string?` | The actual model that was used to generate the response. May differ from the requested model (e.g., if the provider routed to a different model). |
+| `CreatedAt` | `DateTime` | The timestamp when the response was created. For providers that return a Unix timestamp, this is converted to UTC `DateTime`. |
+
+---
+
+## Usage Class
+
+The `Usage` class provides token usage statistics.
+
+| Property | Type | Description |
+| :--- | :--- | :--- |
+| `InputTokens` | `int` | The number of tokens in the input (prompt + system message). |
+| `OutputTokens` | `int` | The number of tokens generated in the response. |
+| `TotalTokens` | `int` | The total number of tokens (input + output). Calculated automatically. |
+
+---
+
+## Provider-Specific Notes
+
+| Provider | `FinishReason` Values | Notes |
+| :--- | :--- | :--- |
+| **OpenAI** | `"stop"`, `"length"`, `"content_filter"`, `"tool_calls"` | `Usage` maps to `prompt_tokens` and `completion_tokens`. |
+| **Anthropic** | `"end_turn"`, `"max_tokens"`, `"stop_sequence"`, `"tool_use"` | `Usage` maps to `input_tokens` and `output_tokens`. |
+| **Google** | `"STOP"`, `"MAX_TOKENS"`, `"SAFETY"`, `"RECITATION"` | `Usage` maps to `promptTokenCount` and `candidatesTokenCount`. |
+| **Ollama** | `"stop"`, `"max_tokens"` | `Usage` maps to `prompt_eval_count` and `eval_count`. |
+
+---
+
 ### ChatChunk (streaming)
 
 Returned by `StreamAsync`, one instance per streamed delta:
@@ -224,7 +314,59 @@ public class ChatChunk
 }
 ```
 
-`IsComplete` is `true` on the final chunk of the stream. `FinishReason` is only populated on that final chunk (where the provider's wire format makes it available — see the per‑provider notes below for what each provider actually signals).
+## Properties
+
+| Property | Type | Description |
+| :--- | :--- | :--- |
+| `Content` | `string?` | A fragment of the generated response text. Chunks are streamed incrementally and should be concatenated in order to form the complete message. May be `null` or empty if the chunk does not contain text (e.g., a chunk that only signals completion). |
+| `IsComplete` | `bool` | Indicates whether this is the final chunk in the stream. When `true`, the stream has ended and no more chunks will be received. |
+| `FinishReason` | `string?` | The reason why the generation stopped. This is typically only present on the final chunk (when `IsComplete` is `true`). Common values: `"stop"`, `"length"`, `"content_filter"`, `"tool_calls"`, etc. Provider-specific values may vary. |
+
+---
+
+## How Streaming Works
+
+1. The user calls `StreamAsync` on the client.
+2. The provider sends the response incrementally.
+3. Each chunk is yielded as a `ChatChunk` object.
+4. The consumer concatenates `Content` from each chunk.
+5. The final chunk has `IsComplete = true` and may contain `FinishReason`.
+
+---
+
+## Provider-Specific Notes
+
+| Provider | `FinishReason` Values | When `FinishReason` Is Sent |
+| :--- | :--- | :--- |
+| **OpenAI** | `"stop"`, `"length"`, `"content_filter"`, `"tool_calls"` | On the final chunk (after `data: [DONE]`). |
+| **Anthropic** | `"end_turn"`, `"max_tokens"`, `"stop_sequence"`, `"tool_use"` | On the final `message_stop` event. |
+| **Google** | `"STOP"`, `"MAX_TOKENS"`, `"SAFETY"`, `"RECITATION"` | On the final chunk containing `finishReason`. |
+| **Ollama** | `"stop"`, `"max_tokens"` | On the final chunk with `done: true`. |
+
+---
+
+## Example: Streaming Usage
+
+```csharp
+await foreach (var chunk in client.StreamAsync(request))
+{
+    // Append content to build the full response
+    Console.Write(chunk.Content);
+
+    // Check if the stream is complete
+    if (chunk.IsComplete)
+    {
+        Console.WriteLine($"\nStream ended. Reason: {chunk.FinishReason ?? "Unknown"}");
+    }
+}
+```
+
+**Notes**
+- Content may be null or empty on chunks that do not contain text (e.g., a chunk that only signals completion with FinishReason).
+- IsComplete is false for all chunks except the last one.
+- FinishReason is only present on the final chunk (when IsComplete is true). For providers that do not return a finish reason, it may be null.
+- Always check IsComplete to know when the stream has ended — do not rely on the absence of chunks.
+- The total response is built by concatenating all Content values in order.
 
 ### Usage
 
@@ -243,6 +385,10 @@ public class Usage
 
 ### LLMConnectClientOptions reference
 
+The `LLMConnectClientOptions` class provides configuration for an `LLMConnectClient` instance. It controls which provider to use, authentication, endpoint overrides, timeouts, retries, and logging.
+
+---
+
 | Property | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `Provider` | `ProviderType` | `OpenAI` | Which provider to target: `OpenAI`, `Anthropic`, `Google`, `Ollama`. |
@@ -254,6 +400,71 @@ public class Usage
 | `MaxRetries` | `int` | `3` | Maximum retry attempts on transient failures (must be `>= 0`). |
 | `LoggerFactory` | `ILoggerFactory?` | `null` | Optional. If provided, LLMConnect emits structured logs (retries, errors) through it. |
 | `ExtraOptions` | `Dictionary<string, object>?` | `null` | Reserved for future provider‑specific configuration. |
+
+## Provider-Specific Notes
+
+| Property | OpenAI | Anthropic | Google | Ollama |
+| :--- | :--- | :--- | :--- | :--- |
+| `ApiKey` | ✅ Required | ✅ Required | ✅ Required | ❌ Not required |
+| `Endpoint` | ✅ Optional (override) | ✅ Optional (override) | ✅ Optional (override) | ✅ Optional (override) |
+| `OllamaPort` | ❌ N/A | ❌ N/A | ❌ N/A | ✅ Uses `{port}` in endpoint |
+| `DefaultModel` | ✅ Fallback | ✅ Fallback | ✅ Fallback | ✅ Fallback |
+
+---
+
+## Default Models
+
+When `DefaultModel` is not set, the library uses these provider-specific defaults:
+
+| Provider | Default Model |
+| :--- | :--- |
+| `OpenAI` | `gpt-3.5-turbo` |
+| `Anthropic` | `claude-3-5-sonnet-20241022` |
+| `Google` | `gemini-2.0-flash` |
+| `Ollama` | `llama3.2` |
+
+---
+
+## Endpoint Resolution
+
+The library resolves the endpoint in the following order:
+
+1. **Custom endpoint** – If `Endpoint` is set, it is used as-is.
+2. **Ollama port override** – If `Provider` is `Ollama` and `OllamaPort` is set, the endpoint becomes `http://localhost:{port}/api/chat`.
+3. **Default endpoint** – Falls back to the provider's default endpoint from `EndpointRegistry`.
+
+If you need a fully custom endpoint (e.g., Azure OpenAI, a proxy, or a different host), set `Endpoint` to the full URL.
+
+---
+
+## Validation Rules
+
+| Rule | Description |
+| :--- | :--- |
+| `ApiKey` required for cloud providers | `OpenAI`, `Anthropic`, and `Google` require a non-empty `ApiKey`. |
+| `Timeout` must be greater than zero | Throws `ArgumentException` if `Timeout <= TimeSpan.Zero`. |
+| `MaxRetries` must be >= 0 | Throws `ArgumentException` if `MaxRetries < 0`. |
+| `DefaultModel` cannot exceed 100 characters | Throws `ArgumentException` if longer than 100 characters. |
+| `Endpoint` must be a valid URL | If provided, must be a well-formed absolute URL. |
+| `Endpoint` must use HTTPS for cloud providers | HTTP is only allowed for `Ollama` or `localhost`. |
+| `OllamaPort` must be between 1 and 65535 | Throws `ArgumentException` if out of range. |
+
+---
+
+## Usage Examples
+
+### 1. Cloud Provider (OpenAI)
+
+```csharp
+var options = new LLMConnectClientOptions
+{
+    Provider = ProviderType.OpenAI,
+    ApiKey = "sk-...",
+    DefaultModel = "gpt-4",
+    Timeout = TimeSpan.FromSeconds(30),
+    MaxRetries = 3
+};
+```
 
 ### Choosing a constructor
 
@@ -299,6 +510,78 @@ builder.Services.AddLLMConnect(options =>
     options.MaxRetries = 3;
 });
 ```
+
+---
+## Ollama Default & Custom Port
+
+```csharp
+// Ollama Default Port
+var options = new LLMConnectClientOptions
+{
+    Provider = ProviderType.Ollama,
+    // No ApiKey required
+    DefaultModel = "llama3.2"
+};
+
+//Ollama Custom Port
+var options = new LLMConnectClientOptions
+{
+    Provider = ProviderType.Ollama,
+    OllamaPort = 11435,
+    DefaultModel = "gemma:2b"
+};
+
+```
+
+---
+
+## Azure OpenAI
+
+```csharp
+// Azure OpenAI
+var options = new LLMConnectClientOptions
+{
+    Provider = ProviderType.OpenAI,
+    ApiKey = "your-azure-key",
+    Endpoint = "https://my-azure.openai.azure.com/openai/deployments/gpt-4/chat/completions?api-version=2024-02-15-preview",
+    DefaultModel = "gpt-4"
+};
+```
+
+---
+## With Logging
+
+```csharp
+var loggerFactory = LoggerFactory.Create(builder =>
+{
+    builder.AddConsole();
+    builder.SetMinimumLevel(LogLevel.Information);
+});
+
+var options = new LLMConnectClientOptions
+{
+    Provider = ProviderType.OpenAI,
+    ApiKey = "sk-...",
+    LoggerFactory = loggerFactory
+};
+```
+
+---
+
+## DI
+
+```csharp
+builder.Services.AddLLMConnect(options =>
+{
+    options.Provider = ProviderType.OpenAI;
+    options.ApiKey = builder.Configuration["OpenAI:ApiKey"];
+    options.DefaultModel = "gpt-4";
+    options.Timeout = TimeSpan.FromSeconds(30);
+});
+```
+
+---
+
 
 This registers:
 
