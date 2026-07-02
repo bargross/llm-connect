@@ -27,7 +27,7 @@ jobs:
         ls -la
         echo ""
         echo "LLMConnect directory contents:"
-        ls -la ./LLMConnect || echo "Checkpoint.NET folder does not exist"
+        ls -la ./LLMConnect || echo "LLMConnect folder does not exist"
         echo ""
         echo "Looking for .sln files:"
         find . -name "*.sln" -type f
