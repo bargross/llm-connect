@@ -1,7 +1,6 @@
 ﻿using FluentAssertions;
 using LLMConnect.Models;
 using LLMConnect.Settings;
-using LLMConnect.Streams.StreamReaders;
 using Microsoft.Extensions.Logging;
 using Moq;
 

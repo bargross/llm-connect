@@ -1,10 +1,8 @@
 ﻿using FluentAssertions;
 using LLMConnect.Settings;
-using LLMConnect.Streams.StreamReaders;
 using Microsoft.Extensions.Logging;
 using Moq;
 using System.Text;
-using Xunit;
 
 namespace LLMConnect.Tests.Streams.StreamReaders;
 

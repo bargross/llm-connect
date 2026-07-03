@@ -1,12 +1,16 @@
-﻿using LLMConnect.Models;
-using LLMConnect.Settings;
+﻿using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 
 namespace LLMConnect.Validators.Options;
 
 internal class OllamaOptionsValidator : LLMConnectOptionsValidationBase, IOptionsValidator
 {
-    protected override void ValidateProviderSpecific(LLMConnectClientOptions options, ILogger? logger = null)
+    protected override void ValidateProviderSpecificGeneralOptions(LLMConnectGeneralOptions options, ILogger? logger = null)
+    {
+        // No API key required
+    }
+
+    protected override void ValidateProviderSpecificEndpointOptions(LLMConnectEndpointOptions options, ILogger? logger = null)
     {
         // No API key required
 

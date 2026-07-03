@@ -7,7 +7,7 @@ namespace LLMConnect;
 
 internal class AnthropicStreamChunkParser : ChunkParserBase<AnthropicStreamChunkParser>, IStreamChunkParser
 {
-    public AnthropicStreamChunkParser(LLMConnectClientOptions options) : base(options) { }
+    public AnthropicStreamChunkParser(LLMConnectGeneralOptions options) : base(options) { }
 
     public ChatChunk? Parse(StreamEvent evt)
     {

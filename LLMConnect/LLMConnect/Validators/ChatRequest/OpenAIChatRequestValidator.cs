@@ -2,7 +2,7 @@
 
 namespace LLMConnect;
 
-internal class OpenAIChatRequestValidator : ChatRequestValidatorBase, IChatRequestValidator
+internal class OpenAIChatRequestValidator : ChatRequestValidatorBase
 {
     protected override void ValidateProviderSpecific(ChatRequest request, ILogger? logger)
     {

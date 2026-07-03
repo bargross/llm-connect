@@ -7,7 +7,7 @@ namespace LLMConnect;
 
 internal class OllamaStreamChunkParser : ChunkParserBase<OllamaStreamChunkParser>, IStreamChunkParser
 {
-    public OllamaStreamChunkParser(LLMConnectClientOptions options) : base(options) { }
+    public OllamaStreamChunkParser(LLMConnectGeneralOptions options) : base(options) { }
 
     public ChatChunk? Parse(StreamEvent evt)
     {

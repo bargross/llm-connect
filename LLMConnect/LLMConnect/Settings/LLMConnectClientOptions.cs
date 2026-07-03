@@ -41,6 +41,32 @@ public class LLMConnectClientOptions
     /// </summary>
     public ILoggerFactory? LoggerFactory { get; set; }
 
+    /// <summary>
+    /// Optional custom response deserializer for provider-specific or custom endpoints.
+    /// If provided, this delegate is used to deserialize the HTTP response content
+    /// into a ChatResponse object, bypassing the built-in provider-specific deserialization.
+    /// </summary>
+    public Func<string, CancellationToken, Task<ChatResponse>>? ChatResponseDeserializer { get; set; }
+
+    /// <summary>
+    /// Optional custom response deserializer for provider-specific or custom endpoints.
+    /// If provided, this delegate is used to deserialize the HTTP response content
+    /// into an EmbeddingResponse object, bypassing the built-in provider-specific deserialization.
+    /// </summary>
+    public Func<string, CancellationToken, Task<EmbeddingResponse>>? EmbeddingResponseDeserializer { get; set; }
+
+    /// <summary>
+    /// Optional custom stream event reader for custom endpoints.
+    /// If provided, this is used instead of the built-in reader for the provider.
+    /// </summary>
+    public Func<IStreamEventReader>? CustomStreamEventReaderFactory { get; set; }
+
+    /// <summary>
+    /// Optional custom stream chunk parser for custom endpoints.
+    /// If provided, this is used instead of the built-in parser for the provider.
+    /// </summary>
+    public Func<IStreamChunkParser>? CustomStreamChunkParserFactory { get; set; }
+
     /// <summary>Reserved for future provider-specific configuration.</summary>
-    //public Dictionary<string, object>? ExtraOptions { get; set; }
+    public Dictionary<string, object>? ExtraOptions { get; set; }
 }

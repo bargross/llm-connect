@@ -2,7 +2,7 @@
 
 namespace LLMConnect;
 
-internal class AnthropicChatRequestValidator : ChatRequestValidatorBase, IChatRequestValidator
+internal class AnthropicChatRequestValidator : ChatRequestValidatorBase
 {
     protected override void ValidateProviderSpecific(ChatRequest request, ILogger? logger)
     {

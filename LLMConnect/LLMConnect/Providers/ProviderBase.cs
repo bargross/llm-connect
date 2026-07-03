@@ -1,12 +1,23 @@
 ﻿using LLMConnect.Exceptions;
 using LLMConnect.Models;
+using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace LLMConnect
 {
-    internal abstract class ProviderBase
+    internal abstract class ProviderBase(LLMConnectGeneralOptions generalOpts)
     {
+        protected readonly ILogger<OpenAIProvider>? _logger = generalOpts.LoggerFactory?.CreateLogger<OpenAIProvider>();
+        protected readonly IChatRequestValidator _chatRequestValidator = ChatRequestValidatorFactory.Create(generalOpts.Provider);
+        protected readonly IEmbeddingRequestValidator? _embeddingRequestValidator = EmbeddingRequestValidatorFactory.Create(generalOpts.Provider);
+
+        protected readonly JsonSerializerOptions DefaultJsonSerializerOptions = new JsonSerializerOptions
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+
         public async Task<string> ExtractErrorMessage(HttpResponseMessage response, CancellationToken cancellationToken)
         {
             try
@@ -50,7 +61,7 @@ namespace LLMConnect
             }
         }
 
-        public async Task LogAndThrow(ProviderType providerType, HttpResponseMessage response, ILogger? logger, CancellationToken cancellationToken)
+        public async Task LogAndThrow(ProviderType providerType, HttpResponseMessage response, CancellationToken cancellationToken)
         {
             var provider = providerType.ToString();
 
@@ -58,26 +69,100 @@ namespace LLMConnect
 
             var exception = new LLMConnectException(provider, errorMessage);
 
-            logger?.LogError(exception.Provider, exception.Message, exception);
+            _logger?.LogError(exception.Provider, exception.Message, exception);
 
             throw exception;
         }
 
-        public TResult? GetResponse<TResult>(string jsonString, ILogger? logger, ProviderType type)
+        public async Task<TResult?> GetResponse<TResult>(HttpResponseMessage response, ProviderType type, CancellationToken cancellationToken)
         {
             try
             {
-                return JsonSerializer.Deserialize<TResult>(jsonString);
+                var json = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                return JsonSerializer.Deserialize<TResult>(json);
             }
             catch (JsonException ex)
             {
                 var exception = new LLMConnectException(type.ToString(), "Failed to deserialize response due to: {ex.Message}");
 
-                logger?.LogError(exception.Provider, exception.Message);
+                _logger?.LogError(exception.Provider, exception.Message);
 
                 throw exception;
             }
+        }
 
+        public async IAsyncEnumerable<ChatChunk> ReadFromStreamAsync(Stream stream, LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts, CancellationToken cancellationToken)
+        {
+            if (endpointOpts.HasEndpoint && !endpointOpts.HasCustomReaderAndParser)
+                throw new LLMConnectException(generalOpts.Provider.ToString(), "Custom stream event reader and parser are required when using a custom endpoint.");
+
+            var reader = endpointOpts.CustomStreamEventReaderFactory != null
+                ? endpointOpts.CustomStreamEventReaderFactory()
+                : StreamReaderFactory.Create(generalOpts.Provider, generalOpts);
+
+            var parser = endpointOpts.CustomStreamChunkParserFactory != null
+                ? endpointOpts.CustomStreamChunkParserFactory()
+                : StreamChunkParserFactory.Create(generalOpts.Provider, generalOpts);
+
+            await foreach (var evt in reader.ReadEventsAsync(stream, cancellationToken))
+            {
+                var chunk = parser.Parse(evt);
+                if (chunk != null)
+                    yield return chunk;
+            }
+        }
+
+        public async Task<ChatResponse> DeserializeChatResponseAsync(
+            HttpResponseMessage response,
+            ProviderType type,
+            LLMConnectEndpointOptions options,
+            CancellationToken cancellationToken)
+        {
+            if (!options.HasCustomChatDeserializer)
+                throw new LLMConnectException(type.ToString(), "Custom response deserializer is required when using a custom endpoint.");
+            
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            try
+            {
+                return await options.ChatResponseDeserializer(json, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError("CustomDeserializer", $"Custom response deserializer failed: {ex.Message}", ex);
+
+                throw new LLMConnectException(
+                    "CustomDeserializer",
+                    $"Custom response deserializer failed: {ex.Message}",
+                    ex);
+            }
+        }
+
+        public async Task<EmbeddingResponse> DeserializeEmbeddingResponseAsync(
+            HttpResponseMessage response,
+            ProviderType type,
+            LLMConnectEndpointOptions options,
+            CancellationToken cancellationToken)
+        {   
+            if (!options.HasCustomEmbeddingDeserializer)
+                throw new LLMConnectException(type.ToString(), "Custom response deserializer is required when using a custom endpoint.");
+
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            try
+            {
+                return await options.EmbeddingResponseDeserializer(json, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError("CustomDeserializer", $"Custom response deserializer failed: {ex.Message}", ex);
+
+                throw new LLMConnectException(
+                    "CustomDeserializer",
+                    $"Custom response deserializer failed: {ex.Message}",
+                    ex);
+            }
         }
     }
 }

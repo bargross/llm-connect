@@ -2,7 +2,7 @@
 
 namespace LLMConnect;
 
-internal class OllamaChatRequestValidator : ChatRequestValidatorBase, IChatRequestValidator
+internal class OllamaChatRequestValidator : ChatRequestValidatorBase
 {
     protected override void ValidateProviderSpecific(ChatRequest request, ILogger? logger)
     {

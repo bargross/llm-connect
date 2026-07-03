@@ -2,7 +2,7 @@
 
 namespace LLMConnect;
 
-internal abstract class ChatRequestValidatorBase
+internal abstract class ChatRequestValidatorBase: IChatRequestValidator
 {
     public void Validate(ChatRequest request, ILogger? logger)
     {

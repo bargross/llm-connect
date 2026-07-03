@@ -6,5 +6,5 @@ namespace LLMConnect;
 
 internal static class LLMConnectOptionsValidator
 {
-    public static void Validate(LLMConnectClientOptions options, ILogger? logger = null) => OptionsValidatorFactory.Create(options.Provider).Validate(options, logger);
+    public static void Validate(LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts, ILogger? logger = null) => OptionsValidatorFactory.Create(generalOpts.Provider).Validate(generalOpts, endpointOpts, logger);
 }

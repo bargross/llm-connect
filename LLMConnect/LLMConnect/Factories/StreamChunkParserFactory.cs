@@ -6,7 +6,7 @@ namespace LLMConnect;
 
 internal static class StreamChunkParserFactory
 {
-    public static IStreamChunkParser Create(ProviderType provider, LLMConnectClientOptions options)
+    public static IStreamChunkParser Create(ProviderType provider, LLMConnectGeneralOptions options)
     {
         var logger = options.LoggerFactory?.CreateLogger("StreamChunkParserFactory");
 

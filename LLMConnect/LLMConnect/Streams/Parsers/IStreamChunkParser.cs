@@ -2,7 +2,7 @@
 
 namespace LLMConnect;
 
-internal interface IStreamChunkParser
+public interface IStreamChunkParser
 {
     ChatChunk? Parse(StreamEvent evt);
 }

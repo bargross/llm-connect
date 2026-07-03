@@ -7,7 +7,7 @@ namespace LLMConnect;
 
 internal class GoogleStreamChunkParser : ChunkParserBase<GoogleStreamChunkParser>, IStreamChunkParser
 {
-    public GoogleStreamChunkParser(LLMConnectClientOptions options) : base(options) { }
+    public GoogleStreamChunkParser(LLMConnectGeneralOptions options) : base(options) { }
 
     public ChatChunk? Parse(StreamEvent evt)
     {

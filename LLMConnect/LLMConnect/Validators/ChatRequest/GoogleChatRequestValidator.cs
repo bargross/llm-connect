@@ -2,7 +2,7 @@
 
 namespace LLMConnect;
 
-internal class GoogleChatRequestValidator : ChatRequestValidatorBase, IChatRequestValidator
+internal class GoogleChatRequestValidator : ChatRequestValidatorBase
 {
     protected override void ValidateProviderSpecific(ChatRequest request, ILogger? logger)
     {

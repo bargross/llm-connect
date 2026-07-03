@@ -1,5 +1,4 @@
-﻿using LLMConnect.Exceptions;
-using LLMConnect.Models;
+﻿using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
@@ -8,52 +7,48 @@ using System.Text.Json;
 
 namespace LLMConnect;
 
-internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions options): ProviderBase, ILLMProvider
+internal class GoogleProvider(HttpClient httpClient, LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts) : ProviderBase(generalOpts), ILLMProvider
 {
-    private readonly ILogger<GoogleProvider>? _logger = options.LoggerFactory?.CreateLogger<GoogleProvider>();
-    private readonly IChatRequestValidator _validator = ChatRequestValidatorFactory.Create(options.Provider);
-
     public async Task<ChatResponse?> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
-        _validator.Validate(request, _logger);
+        _chatRequestValidator.Validate(request, _logger);
 
-        var model = request.Model ?? options.InternalComputedDefaultModel();
+        var model = request.Model ?? generalOpts.InternalComputedDefaultModel(request.Model);
         var endpoint = httpClient.BaseAddress?.ToString().Replace("{model}", model);
 
         var googleRequest = request.ToGoogleRequest();
-        var json = JsonSerializer.Serialize(googleRequest);
+        var json = JsonSerializer.Serialize(googleRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         var response = await httpClient.PostAsync(endpoint, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-            await LogAndThrow(options.Provider, response, _logger, cancellationToken);
+            await LogAndThrow(generalOpts.Provider, response, cancellationToken);
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-        
-        var googleResponse = GetResponse<GoogleChatResponse>(responseJson, _logger, options.Provider);
 
-        return googleResponse?.ToChatResponse();
+        return !endpointOpts.HasEndpoint ?
+            (await GetResponse<GoogleChatResponse>(response, generalOpts.Provider, cancellationToken))?.ToChatResponse()
+            : await DeserializeChatResponseAsync(response, generalOpts.Provider, endpointOpts, cancellationToken);
     }
 
     public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        _validator.Validate(request, _logger);
+        _chatRequestValidator.Validate(request, _logger);
 
-        var model = request.Model ?? options.InternalComputedDefaultModel();
-        var baseEndpoint = httpClient.BaseAddress?.ToString();
-        var endpoint = baseEndpoint?
-            .Replace("{model}", model)
-            .Replace("generateContent", "streamGenerateContent");
+        var model = request.Model ?? generalOpts.InternalComputedDefaultModel(request.Model);
+
+        // google streaming endpoint is different from the normal endpoint, so we need to handle it separately
+        var queryParams = EndpointRegistry.GetEndpointParams(QueryType.Chat, generalOpts.Provider);
+        var endpoint = endpointOpts.HasEndpoint ? endpointOpts.Endpoint 
+            : $"{httpClient.BaseAddress}{queryParams.Replace("{model}", model)}/streamGenerateContent";
 
         if (!endpoint.Contains("alt=sse"))
-        {
             endpoint += (endpoint.Contains('?') ? "&" : "?") + "alt=sse";
-        }
 
         var googleRequest = request.ToGoogleRequest();
 
-        var json = JsonSerializer.Serialize(googleRequest);
+        var json = JsonSerializer.Serialize(googleRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
         using var messageReq = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {
@@ -63,17 +58,34 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectClientOptions opt
         var response = await httpClient.SendAsync(messageReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-            await LogAndThrow(options.Provider, response, _logger, cancellationToken);
+            await LogAndThrow(generalOpts.Provider, response, cancellationToken);
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var reader = StreamReaderFactory.Create(options.Provider, options);
-        var parser = StreamChunkParserFactory.Create(options.Provider, options);
 
-        await foreach (var evt in reader.ReadEventsAsync(stream, cancellationToken))
+        await foreach (var chunk in ReadFromStreamAsync(stream, generalOpts, endpointOpts, cancellationToken))
         {
-            var chunk = parser.Parse(evt);
-            if (chunk != null)
-                yield return chunk;
+            yield return chunk;     
         }
+    }
+
+    public async Task<EmbeddingResponse?> GetEmbeddingAsync(EmbeddingRequest request, CancellationToken cancellationToken = default)
+    {
+        _embeddingRequestValidator?.Validate(request, _logger);
+
+        var model = generalOpts.InternalComputedDefaultModel(request.Model);
+        var googleRequest = request.ToGoogleRequest(model);
+
+        var json = JsonSerializer.Serialize(googleRequest, DefaultJsonSerializerOptions);
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        var queryParams = EndpointRegistry.GetEndpointParams(QueryType.Embeddings, generalOpts.Provider);
+        var response = await httpClient.PostAsync(queryParams, content, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+            await LogAndThrow(generalOpts.Provider, response, cancellationToken);
+
+        return !endpointOpts.HasEndpoint ?
+            (await GetResponse<GoogleEmbeddingResponse>(response, generalOpts.Provider, cancellationToken))?.ToEmbeddingResponse()
+            : await DeserializeEmbeddingResponseAsync(response, generalOpts.Provider, endpointOpts, cancellationToken);
     }
 }

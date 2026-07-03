@@ -2,14 +2,14 @@
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 
-namespace LLMConnect.Streams.StreamReaders;
+namespace LLMConnect;
 
 internal class NdjsonStreamEventReader : IStreamEventReader
 {
     private readonly ILogger<NdjsonStreamEventReader>? _logger;
 
     public NdjsonStreamEventReader() { }
-    public NdjsonStreamEventReader(LLMConnectClientOptions options)
+    public NdjsonStreamEventReader(LLMConnectGeneralOptions options)
     {
         _logger = options.LoggerFactory?.CreateLogger<NdjsonStreamEventReader>();
     }

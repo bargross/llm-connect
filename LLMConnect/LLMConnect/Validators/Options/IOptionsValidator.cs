@@ -5,5 +5,5 @@ namespace LLMConnect.Validators.Options;
 
 internal interface IOptionsValidator
 {
-    void Validate(LLMConnectClientOptions options, ILogger? logger = null);
+    void Validate(LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts, ILogger? logger = null);
 }

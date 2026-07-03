@@ -7,7 +7,7 @@ namespace LLMConnect;
 
 internal class OpenAIStreamChunkParser : ChunkParserBase<OpenAIStreamChunkParser>, IStreamChunkParser
 {
-    public OpenAIStreamChunkParser(LLMConnectClientOptions options): base(options) { }
+    public OpenAIStreamChunkParser(LLMConnectGeneralOptions options): base(options) { }
 
     public ChatChunk? Parse(StreamEvent evt)
     {

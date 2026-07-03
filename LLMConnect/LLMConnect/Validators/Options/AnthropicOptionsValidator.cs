@@ -5,5 +5,6 @@ namespace LLMConnect.Validators.Options;
 
 internal class AnthropicOptionsValidator : LLMConnectOptionsValidationBase, IOptionsValidator
 {
-    protected override void ValidateProviderSpecific(LLMConnectClientOptions options, ILogger? logger = null) { }
+    protected override void ValidateProviderSpecificGeneralOptions(LLMConnectGeneralOptions generalOptions, ILogger? logger = null) { }
+    protected override void ValidateProviderSpecificEndpointOptions(LLMConnectEndpointOptions endpointOptions, ILogger? logger = null) { }
 }

@@ -1,13 +1,12 @@
 ﻿using LLMConnect.Models;
 using LLMConnect.Settings;
-using LLMConnect.Streams.StreamReaders;
 using Microsoft.Extensions.Logging;
 
 namespace LLMConnect;
 
 internal static class StreamReaderFactory
 {
-    public static IStreamEventReader Create(ProviderType provider, LLMConnectClientOptions options)
+    public static IStreamEventReader Create(ProviderType provider, LLMConnectGeneralOptions options)
     {
         var logger = options.LoggerFactory?.CreateLogger("StreamChunkParserFactory");
 

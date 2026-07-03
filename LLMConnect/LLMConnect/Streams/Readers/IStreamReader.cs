@@ -1,6 +1,6 @@
-﻿namespace LLMConnect.Streams.StreamReaders;
+﻿namespace LLMConnect;
 
-internal interface IStreamEventReader
+public interface IStreamEventReader
 {
     IAsyncEnumerable<StreamEvent> ReadEventsAsync(
         Stream stream,

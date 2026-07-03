@@ -6,70 +6,75 @@ namespace LLMConnect.Validators.Options;
 
 internal abstract class LLMConnectOptionsValidationBase
 {
-    public virtual void Validate(LLMConnectClientOptions options, ILogger? logger = null)
+    public virtual void Validate(LLMConnectGeneralOptions generalOptions, LLMConnectEndpointOptions endpointOptions, ILogger? logger = null)
     {
-        if (options == null)
-            throw new ArgumentNullException(nameof(options));
+        if (generalOptions == null)
+            throw new ArgumentNullException(nameof(generalOptions));
 
-        ValidateApiKey(options, logger);
+        if (endpointOptions == null)
+            throw new ArgumentNullException(nameof(endpointOptions));
 
-        if (options.Timeout <= TimeSpan.Zero)
+        ValidateApiKey(generalOptions, logger);
+
+        if (generalOptions.Timeout <= TimeSpan.Zero)
         {
             var errorMessage = "Timeout must be greater than zero.";
             logger?.LogError(errorMessage);
 
-            throw new ArgumentException(errorMessage, nameof(options.Timeout));
+            throw new ArgumentException(errorMessage, nameof(generalOptions.Timeout));
         }
 
-        if (options.MaxRetries < 0)
+        if (generalOptions.MaxRetries < 0)
         {
             var errorMessage = $"MaxRetries must be >= 0.";
             logger?.LogError(errorMessage);
 
-            throw new ArgumentException(errorMessage, nameof(options.MaxRetries));
+            throw new ArgumentException(errorMessage, nameof(generalOptions.MaxRetries));
         }
 
-        if (!string.IsNullOrWhiteSpace(options.DefaultModel) && options.DefaultModel.Length > 100)
+        if (!string.IsNullOrWhiteSpace(generalOptions.DefaultModel) && generalOptions.DefaultModel.Length > 100)
         {
             var errorMessage = "DefaultModel cannot exceed 100 characters.";
             logger?.LogError(errorMessage);
 
-            throw new ArgumentException(errorMessage, nameof(options.DefaultModel));
+            throw new ArgumentException(errorMessage, nameof(generalOptions.DefaultModel));
         }
 
-        ValidateEndpoint(options, logger);
+        ValidateEndpoint(endpointOptions, generalOptions.Provider, logger);
 
-        ValidateProviderSpecific(options, logger);
+        ValidateProviderSpecificGeneralOptions(generalOptions, logger);
+
+        ValidateProviderSpecificEndpointOptions(endpointOptions, logger);
     }
 
-    protected virtual void ValidateEndpoint(LLMConnectClientOptions options, ILogger? logger = null)
+    protected virtual void ValidateEndpoint(LLMConnectEndpointOptions endpointOpts, ProviderType provider, ILogger? logger = null)
     {
-        if (string.IsNullOrWhiteSpace(options.Endpoint))
+        if (string.IsNullOrWhiteSpace(endpointOpts.Endpoint))
             return;
 
-        if (!Uri.IsWellFormedUriString(options.Endpoint, UriKind.Absolute))
+        if (!Uri.IsWellFormedUriString(endpointOpts.Endpoint, UriKind.Absolute))
         {
-            var errorMessage = $"Invalid endpoint URL: {options.Endpoint} for provider {options.Provider.ToString()}";
+            var errorMessage = $"Invalid endpoint URL: {endpointOpts.Endpoint} for provider {provider.ToString()}";
             logger?.LogError(errorMessage);
 
-            throw new ArgumentException(errorMessage, nameof(options.Endpoint));
+            throw new ArgumentException(errorMessage, nameof(endpointOpts.Endpoint));
         }
 
-        var genericProviderEndpoint = new Uri(options.Endpoint);
-        if (options.Provider != ProviderType.Ollama &&
+        var genericProviderEndpoint = new Uri(endpointOpts.Endpoint);
+        if (provider != ProviderType.Ollama &&
             genericProviderEndpoint.Scheme != Uri.UriSchemeHttps &&
             genericProviderEndpoint.Host != "localhost" &&
             genericProviderEndpoint.Host != "127.0.0.1")
         {
-            var errorMessage = $"Endpoint must use HTTPS for provider '{options.Provider.ToString()}'.";
+            var errorMessage = $"Endpoint must use HTTPS for provider '{provider.ToString()}'.";
             logger?.LogError(errorMessage);
 
-            throw new ArgumentException(errorMessage, nameof(options.Endpoint));
+            throw new ArgumentException(errorMessage, nameof(endpointOpts.Endpoint));
         }
 
         // Optional: Warn about known mismatches
-        var openAIUri = new Uri(options.Endpoint);
-        if (options.Provider == ProviderType.OpenAI &&
+        var openAIUri = new Uri(endpointOpts.Endpoint);
+        if (provider == ProviderType.OpenAI &&
             !openAIUri.Host.Contains("openai.com") &&
             !openAIUri.Host.Contains("azure.com") &&
             !openAIUri.Host.Contains("localhost"))
@@ -81,17 +86,17 @@ internal abstract class LLMConnectOptionsValidationBase
         }
     }
 
-    protected virtual void ValidateApiKey(LLMConnectClientOptions options, ILogger? logger = null)
+    protected virtual void ValidateApiKey(LLMConnectGeneralOptions generalOptions, ILogger? logger = null)
     {
-        switch (options.Provider)
+        switch (generalOptions.Provider)
         {
             case ProviderType.Ollama: break;
             case ProviderType.Anthropic:
             case ProviderType.OpenAI:
             case ProviderType.Google:
-                if (string.IsNullOrWhiteSpace(options.ApiKey))
+                if (string.IsNullOrWhiteSpace(generalOptions.ApiKey))
                 {
-                    var errorMessage = $"Missing api key for provider {options.Provider.ToString()}";
+                    var errorMessage = $"Missing api key for provider {generalOptions.Provider.ToString()}";
 
                     logger?.LogError(errorMessage);
                     
@@ -102,5 +107,7 @@ internal abstract class LLMConnectOptionsValidationBase
         }
     }
 
-    protected abstract void ValidateProviderSpecific(LLMConnectClientOptions options, ILogger? logger = null);
+    protected abstract void ValidateProviderSpecificGeneralOptions(LLMConnectGeneralOptions generalOptions, ILogger? logger = null);
+
+    protected abstract void ValidateProviderSpecificEndpointOptions(LLMConnectEndpointOptions endpointOptions, ILogger? logger = null);
 }
