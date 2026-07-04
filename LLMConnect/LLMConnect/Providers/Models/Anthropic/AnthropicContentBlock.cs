@@ -9,4 +9,13 @@ internal class AnthropicContentBlock
 
     [JsonPropertyName("text")]
     public string? Text { get; set; }
+
+    [JsonPropertyName("id")]
+    public string? Id { get; set; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("input")]
+    public Dictionary<string, object>? Input { get; set; }
 }

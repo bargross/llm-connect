@@ -7,9 +7,9 @@ using System.Text.Json.Serialization;
 
 namespace LLMConnect
 {
-    internal abstract class ProviderBase(LLMConnectGeneralOptions generalOpts)
+    internal abstract class ProviderBase<TProvider>(LLMConnectGeneralOptions generalOpts)
     {
-        protected readonly ILogger<OpenAIProvider>? _logger = generalOpts.LoggerFactory?.CreateLogger<OpenAIProvider>();
+        protected readonly ILogger<TProvider>? _logger = generalOpts.LoggerFactory?.CreateLogger<TProvider>();
         protected readonly IChatRequestValidator _chatRequestValidator = ChatRequestValidatorFactory.Create(generalOpts.Provider);
         protected readonly IEmbeddingRequestValidator? _embeddingRequestValidator = EmbeddingRequestValidatorFactory.Create(generalOpts.Provider);
 
@@ -74,34 +74,13 @@ namespace LLMConnect
             throw exception;
         }
 
-        public async Task<TResult?> GetResponse<TResult>(HttpResponseMessage response, ProviderType type, CancellationToken cancellationToken)
-        {
-            try
-            {
-                var json = await response.Content.ReadAsStringAsync(cancellationToken);
-
-                return JsonSerializer.Deserialize<TResult>(json);
-            }
-            catch (JsonException ex)
-            {
-                var exception = new LLMConnectException(type.ToString(), "Failed to deserialize response due to: {ex.Message}");
-
-                _logger?.LogError(exception.Provider, exception.Message);
-
-                throw exception;
-            }
-        }
-
         public async IAsyncEnumerable<ChatChunk> ReadFromStreamAsync(Stream stream, LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts, CancellationToken cancellationToken)
         {
-            if (endpointOpts.HasEndpoint && !endpointOpts.HasCustomReaderAndParser)
-                throw new LLMConnectException(generalOpts.Provider.ToString(), "Custom stream event reader and parser are required when using a custom endpoint.");
-
-            var reader = endpointOpts.CustomStreamEventReaderFactory != null
+            var reader = endpointOpts.HasEndpoint && endpointOpts.HasCustomReaderAndParser
                 ? endpointOpts.CustomStreamEventReaderFactory()
                 : StreamReaderFactory.Create(generalOpts.Provider, generalOpts);
 
-            var parser = endpointOpts.CustomStreamChunkParserFactory != null
+            var parser = endpointOpts.HasEndpoint && endpointOpts.HasCustomReaderAndParser
                 ? endpointOpts.CustomStreamChunkParserFactory()
                 : StreamChunkParserFactory.Create(generalOpts.Provider, generalOpts);
 
@@ -113,56 +92,37 @@ namespace LLMConnect
             }
         }
 
-        public async Task<ChatResponse> DeserializeChatResponseAsync(
+        protected async Task<TResponse?> DeserializeResponseAsync<TProviderResponse, TResponse>(
             HttpResponseMessage response,
-            ProviderType type,
-            LLMConnectEndpointOptions options,
+            ProviderType provider,
+            Func<bool> customDeserializerEvaluator,
+            Func<string, Task<TResponse?>> jsonStringToResponse,
+            Func<TProviderResponse, TResponse?> toChatResponse,
             CancellationToken cancellationToken)
         {
-            if (!options.HasCustomChatDeserializer)
-                throw new LLMConnectException(type.ToString(), "Custom response deserializer is required when using a custom endpoint.");
-            
             var json = await response.Content.ReadAsStringAsync(cancellationToken);
 
-            try
+            // If a custom deserializer is provided, use it
+            if (customDeserializerEvaluator())
             {
-                return await options.ChatResponseDeserializer(json, cancellationToken);
+                try
+                {
+                    return await jsonStringToResponse(json);
+                }
+                catch (Exception ex)
+                {
+                    throw new LLMConnectException("CustomDeserializer", $"Chat deserializer failed: {ex.Message}", ex);
+                }
             }
-            catch (Exception ex)
-            {
-                _logger?.LogError("CustomDeserializer", $"Custom response deserializer failed: {ex.Message}", ex);
 
-                throw new LLMConnectException(
-                    "CustomDeserializer",
-                    $"Custom response deserializer failed: {ex.Message}",
-                    ex);
-            }
-        }
+            // Otherwise, use the standard provider-specific deserialization
+            var providerResponse = JsonSerializer.Deserialize<TProviderResponse>(json);
 
-        public async Task<EmbeddingResponse> DeserializeEmbeddingResponseAsync(
-            HttpResponseMessage response,
-            ProviderType type,
-            LLMConnectEndpointOptions options,
-            CancellationToken cancellationToken)
-        {   
-            if (!options.HasCustomEmbeddingDeserializer)
-                throw new LLMConnectException(type.ToString(), "Custom response deserializer is required when using a custom endpoint.");
+            var chatResponse = toChatResponse.Invoke(providerResponse);
+            if (chatResponse == null)
+                throw new LLMConnectException(provider.ToString(), "Failed to deserialize response.");
 
-            var json = await response.Content.ReadAsStringAsync(cancellationToken);
-
-            try
-            {
-                return await options.EmbeddingResponseDeserializer(json, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogError("CustomDeserializer", $"Custom response deserializer failed: {ex.Message}", ex);
-
-                throw new LLMConnectException(
-                    "CustomDeserializer",
-                    $"Custom response deserializer failed: {ex.Message}",
-                    ex);
-            }
+            return chatResponse;
         }
     }
 }

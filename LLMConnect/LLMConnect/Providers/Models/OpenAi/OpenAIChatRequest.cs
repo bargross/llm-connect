@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Serialization;
+﻿using LLMConnect.Models;
+using System.Text.Json.Serialization;
 
 namespace LLMConnect;
 
@@ -39,6 +40,12 @@ internal class OpenAIChatRequest
 
     [JsonPropertyName("user")]
     public string? User { get; set; }
+
+    [JsonPropertyName("tools")]
+    public List<OpenAITool>? Tools { get; set; }
+
+    [JsonPropertyName("tool_choice")]
+    public object? ToolChoice { get; set; }
 
     [JsonExtensionData]
     public Dictionary<string, object>? ExtraData { get; set; }

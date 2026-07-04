@@ -14,7 +14,7 @@ internal static class EmbeddingRequestMappingExtensions
         var openAiRequest = new OpenAIEmbeddingRequest
         {
             Model = model,
-            Input = request.Text,
+            Input = request.Text ?? string.Empty,
             EncodingFormat = request.EncodingFormat ?? "float",
             Dimensions = request.Dimensions,
             User = request.User

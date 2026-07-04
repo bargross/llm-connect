@@ -5,7 +5,7 @@ public class EmbeddingRequest
     /// <summary>
     /// Text to embed. For the provider, this can be a string or an array of strings. For Google, this is a single string.
     /// </summary>
-    public string? Text { get; set; } = string.Empty;
+    public string? Text { get; set; }
 
     /// <summary>
     /// model name for the embedding request (OpenAI, Google, etc.).

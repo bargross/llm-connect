@@ -12,4 +12,10 @@ internal class GoogleChatRequest
 
     [JsonPropertyName("generationConfig")]
     public GoogleGenerationConfig? GenerationConfig { get; set; }
+
+    [JsonPropertyName("tools")]
+    public List<GoogleTool>? Tools { get; set; }
+
+    [JsonPropertyName("toolConfig")]
+    public GoogleToolConfig? ToolConfig { get; set; }
 }

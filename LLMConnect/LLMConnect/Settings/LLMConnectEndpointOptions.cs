@@ -24,12 +24,12 @@ namespace LLMConnect.Settings
         /// If provided, this delegate is used to deserialize the HTTP response content
         /// into a ChatResponse object, bypassing the built-in provider-specific deserialization.
         /// </summary>
-        public Func<string, CancellationToken, Task<ChatResponse>>? ChatResponseDeserializer { get; set; }
+        public Func<string, CancellationToken, Task<ChatResponse?>>? ChatResponseDeserializer { get; set; }
 
         /// <summary>
         /// Optional custom embedding response deserializer for provider-specific or custom endpoints.
         /// </summary>
-        public Func<string, CancellationToken, Task<EmbeddingResponse>>? EmbeddingResponseDeserializer { get; set; }
+        public Func<string, CancellationToken, Task<EmbeddingResponse?>>? EmbeddingResponseDeserializer { get; set; }
 
         /// <summary>
         /// Optional custom stream event reader for custom endpoints.
@@ -46,9 +46,9 @@ namespace LLMConnect.Settings
         /// <summary>Reserved for future provider-specific configuration.</summary>
         public Dictionary<string, object>? ExtraOptions { get; set; }
 
-        internal bool HasCustomChatDeserializer => ChatResponseDeserializer is null;
+        internal bool HasCustomChatDeserializer => ChatResponseDeserializer is not null;
 
-        internal bool HasCustomEmbeddingDeserializer => EmbeddingResponseDeserializer is null;
+        internal bool HasCustomEmbeddingDeserializer => EmbeddingResponseDeserializer is not null;
 
         internal bool HasEndpoint => !string.IsNullOrWhiteSpace(Endpoint);
 

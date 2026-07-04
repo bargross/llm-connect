@@ -54,6 +54,9 @@ internal static class ChatRequestMappingExtensions
             User = request.User
         };
 
+        openAiRequest.Tools = request.MapOpenAITools();
+        openAiRequest.ToolChoice = request.MapOpenAIToolChoice();
+
         if (request.ExtraParameters != null && request.ExtraParameters.Count > 0)
             openAiRequest.ExtraData = new Dictionary<string, object>(request.ExtraParameters);
 
@@ -82,7 +85,9 @@ internal static class ChatRequestMappingExtensions
             Temperature = request.Temperature != 0.0f ? request.Temperature : null,
             TopP = request.TopP != 0.0f ? request.TopP : null,
             Stream = null, // Set externally
-            StopSequences = request.StopSequences
+            StopSequences = request.StopSequences,
+            Tools = request.MapAnthropicTools(),
+            ToolChoice = request.MapAnthropicToolChoice()
         };
     }
 
@@ -121,7 +126,9 @@ internal static class ChatRequestMappingExtensions
         {
             Contents = contents,
             SystemInstruction = systemContent,
-            GenerationConfig = generationConfig
+            GenerationConfig = generationConfig,
+            Tools = request.MapGoogleTools(),
+            ToolConfig = request.MapGoogleToolChoice()
         };
     }
 
@@ -140,6 +147,8 @@ internal static class ChatRequestMappingExtensions
         {
             Model = model,
             Messages = messages,
+            Tools = request.MapOllamaTools(),
+            ToolChoice = request.MapOllamaToolChoice(),
             Options = new OllamaOptions
             {
                 Temperature = request.Temperature != 0.0f ? request.Temperature : null,

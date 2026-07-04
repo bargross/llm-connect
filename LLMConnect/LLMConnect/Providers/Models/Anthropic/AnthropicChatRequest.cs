@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Serialization;
+﻿using LLMConnect.Models;
+using System.Text.Json.Serialization;
 
 namespace LLMConnect;
 
@@ -27,4 +28,10 @@ internal class AnthropicChatRequest
 
     [JsonPropertyName("stop_sequences")]
     public List<string>? StopSequences { get; set; }
+
+    [JsonPropertyName("tools")]
+    public List<AnthropicTool>? Tools { get; set; }
+
+    [JsonPropertyName("tool_choice")]
+    public string? ToolChoice { get; set; }
 }

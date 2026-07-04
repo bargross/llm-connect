@@ -19,4 +19,9 @@ public class ChatResponse
 
     /// <summary>The timestamp at which the response was created.</summary>
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>
+    /// A list of tool calls made during the chat completion, if any. This is optional and may be null if no tools were called.
+    /// </summary>
+    public List<ToolCall>? ToolCalls { get; set; }
 }

@@ -10,7 +10,7 @@ internal static class EmbeddingRequestValidatorFactory
         return provider switch
         {
             ProviderType.OpenAI => new OpenAIEmbeddingRequestValidator(),
-            ProviderType.Anthropic => null,
+            ProviderType.Anthropic => new AnthropicEmbeddingRequestValidator(),
             ProviderType.Google => new GoogleEmbeddingRequestValidator(),
             ProviderType.Ollama => new OllamaEmbeddingRequestValidator(),
             _ => throw new NotSupportedException($"Provider '{provider}' is not supported for embeddings.")
