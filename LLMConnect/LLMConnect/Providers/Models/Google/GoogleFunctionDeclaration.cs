@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace LLMConnect.Models;
+namespace LLMConnect;
 
 internal class GoogleFunctionDeclaration
 {

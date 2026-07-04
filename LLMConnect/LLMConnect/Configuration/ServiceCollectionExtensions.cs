@@ -2,17 +2,24 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
-using Polly;
-using Polly.RateLimiting;
-using System.Net;
-using System.Threading.RateLimiting;
 
 namespace LLMConnect.Configuration;
 
+/// <summary>
+/// Extension methods for registering LLMConnect services in an IServiceCollection.
+/// </summary>
 public static class ServiceCollectionExtensions
 {
-    // ---------- Unified options (backward compatible) ----------
 
+    private static readonly object _lock = new object();
+    private static bool _coreServicesRegistered = false;
+
+    /// <summary>
+    /// Adds LLMConnect services to the IServiceCollection with a single configuration action for LLMConnectClientOptions.
+    /// </summary>
+    /// <param name="services">The IServiceCollection to add services to.</param>
+    /// <param name="configure">The action to configure the LLMConnectClientOptions.</param>
+    /// <returns>The IServiceCollection with the added services.</returns>
     public static IServiceCollection AddLLMConnect(
         this IServiceCollection services,
         Action<LLMConnectClientOptions>? configure = null)
@@ -31,8 +38,14 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    // ---------- Split options (new) ----------
 
+    /// <summary>
+    /// Adds LLMConnect services to the IServiceCollection with separate configuration for general and endpoint options.
+    /// </summary>
+    /// <param name="services">The IServiceCollection to add services to.</param>
+    /// <param name="configureGeneral">The action to configure the general options.</param>
+    /// <param name="configureEndpoint">The action to configure the endpoint options.</param>
+    /// <returns>The IServiceCollection with the added services.</returns>
     public static IServiceCollection AddLLMConnect(
         this IServiceCollection services,
         Action<LLMConnectGeneralOptions>? configureGeneral = null,
@@ -47,22 +60,25 @@ public static class ServiceCollectionExtensions
         {
             var general = sp.GetRequiredService<IOptions<LLMConnectGeneralOptions>>().Value;
             var endpoint = sp.GetRequiredService<IOptions<LLMConnectEndpointOptions>>().Value;
+
             return new LLMConnectClient(general, endpoint);
         });
 
         return services;
     }
 
-    // Overload: only GeneralOptions
+    /// <summary>
+    /// Adds LLMConnect services to the IServiceCollection with a configuration action for general options only.
+    /// </summary>
+    /// <param name="services">The IServiceCollection to add services to.</param>
+    /// <param name="configureGeneral">The action to configure the general options.</param>
+    /// <returns>The IServiceCollection with the added services.</returns>
     public static IServiceCollection AddLLMConnect(
         this IServiceCollection services,
         Action<LLMConnectGeneralOptions> configureGeneral)
         => services.AddLLMConnect(configureGeneral, null);
 
     // ---------- Core registration (safe, once) ----------
-
-    private static readonly object _lock = new object();
-    private static bool _coreServicesRegistered = false;
 
     private static void RegisterCoreServices(IServiceCollection services)
     {
@@ -75,47 +91,12 @@ public static class ServiceCollectionExtensions
                 return;
 
             services.AddHttpClient("LLMConnect")
-                .AddResilienceHandler("LLMRetryPipeline", builder =>
+                .AddHttpMessageHandler(sp =>
                 {
-                    // Retry strategy
-                    builder.AddRetry(new HttpRetryStrategyOptions
-                    {
-                        MaxRetryAttempts = 3,
-                        Delay = TimeSpan.FromSeconds(1),
-                        BackoffType = DelayBackoffType.Exponential,
-                        UseJitter = true,
-                        ShouldHandle = args =>
-                        {
-                            var statusCode = args.Outcome.Result?.StatusCode;
-                            return ValueTask.FromResult(
-                                statusCode >= HttpStatusCode.InternalServerError ||
-                                statusCode == HttpStatusCode.TooManyRequests ||
-                                args.Outcome.Exception is HttpRequestException);
-                        },
-                        OnRetry = args =>
-                        {
-                            // Logging can be added via the service provider if needed
-                            return ValueTask.CompletedTask;
-                        }
-                    });
+                    var options = sp.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
+                    var logger = options.LoggerFactory?.CreateLogger("LLMConnect.Retry");
 
-                    // Circuit breaker
-                    builder.AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
-                    {
-                        SamplingDuration = TimeSpan.FromSeconds(30),
-                        FailureRatio = 0.5,
-                        MinimumThroughput = 5,
-                        ShouldHandle = args => ValueTask.FromResult(true)
-                    });
-
-                    // Rate limiter
-                    builder.AddRateLimiter(new SlidingWindowRateLimiter(
-                        new SlidingWindowRateLimiterOptions
-                        {
-                            PermitLimit = 100,
-                            Window = TimeSpan.FromSeconds(60),
-                            SegmentsPerWindow = 6
-                        }));
+                    return new RetryDelegatingHandler(options.MaxRetries, logger);
                 })
                 .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
                 {
