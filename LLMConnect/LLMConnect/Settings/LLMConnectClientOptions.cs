@@ -1,4 +1,5 @@
 ﻿using LLMConnect.Models;
+using LLMConnect.Streams;
 using Microsoft.Extensions.Logging;
 
 namespace LLMConnect.Settings;
@@ -46,14 +47,14 @@ public class LLMConnectClientOptions
     /// If provided, this delegate is used to deserialize the HTTP response content
     /// into a ChatResponse object, bypassing the built-in provider-specific deserialization.
     /// </summary>
-    public Func<string, CancellationToken, Task<ChatResponse>>? ChatResponseDeserializer { get; set; }
+    public Func<string, CancellationToken, Task<ChatResponse?>>? ChatResponseDeserializer { get; set; }
 
     /// <summary>
     /// Optional custom response deserializer for provider-specific or custom endpoints.
     /// If provided, this delegate is used to deserialize the HTTP response content
     /// into an EmbeddingResponse object, bypassing the built-in provider-specific deserialization.
     /// </summary>
-    public Func<string, CancellationToken, Task<EmbeddingResponse>>? EmbeddingResponseDeserializer { get; set; }
+    public Func<string, CancellationToken, Task<EmbeddingResponse?>>? EmbeddingResponseDeserializer { get; set; }
 
     /// <summary>
     /// Optional custom stream event reader for custom endpoints.

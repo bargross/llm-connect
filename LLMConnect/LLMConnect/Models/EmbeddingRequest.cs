@@ -1,5 +1,8 @@
 ﻿namespace LLMConnect.Models;
 
+/// <summary>
+/// Represents a request for generating embeddings from text using various providers (e.g., OpenAI, Google).
+/// </summary>
 public class EmbeddingRequest
 {
     /// <summary>

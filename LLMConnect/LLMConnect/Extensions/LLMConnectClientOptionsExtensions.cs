@@ -14,6 +14,7 @@ namespace LLMConnect
                     ProviderType.Google => "gemini-2.0-flash",
                     ProviderType.Anthropic => "claude-3-5-sonnet-20241022",
                     ProviderType.OpenAI => "gpt-3.5-turbo",
+                    _ => throw new NotSupportedException($"Provider '{options.Provider}' is not supported.")
                 };
 
 

@@ -2,6 +2,7 @@
 using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -74,7 +75,7 @@ namespace LLMConnect
             throw exception;
         }
 
-        public async IAsyncEnumerable<ChatChunk> ReadFromStreamAsync(Stream stream, LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts, CancellationToken cancellationToken)
+        public async IAsyncEnumerable<ChatChunk> ReadFromStreamAsync(Stream stream, LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts, [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             var reader = endpointOpts.HasEndpoint && endpointOpts.HasCustomReaderAndParser
                 ? endpointOpts.CustomStreamEventReaderFactory()
@@ -97,7 +98,7 @@ namespace LLMConnect
             ProviderType provider,
             Func<bool> customDeserializerEvaluator,
             Func<string, Task<TResponse?>> jsonStringToResponse,
-            Func<TProviderResponse, TResponse?> toChatResponse,
+            Func<TProviderResponse?, TResponse?> toChatResponse,
             CancellationToken cancellationToken)
         {
             var json = await response.Content.ReadAsStringAsync(cancellationToken);

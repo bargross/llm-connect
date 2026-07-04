@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace LLMConnect;
 
-internal class AnthropicProvider(HttpClient httpClient, LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts): ProviderBase<AnthropicProvider>(generalOpts), ILLMProvider
+internal class AnthropicProvider(HttpClient httpClient, LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts): ProviderBase<AnthropicProvider>(generalOpts!), ILLMProvider
 {
     public async Task<ChatResponse?> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {

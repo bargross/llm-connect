@@ -1,4 +1,5 @@
 ﻿using LLMConnect.Settings;
+using LLMConnect.Streams;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 

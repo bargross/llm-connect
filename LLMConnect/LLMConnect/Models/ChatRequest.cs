@@ -32,9 +32,10 @@ public class ChatRequest
     /// </summary>
     public string? Model { get; set; }
 
+    // TODO: Implement Provider selection per request. Currently, the provider is determined by the options
     /// <summary>
-    /// Reserved for future use. Currently the provider is determined by
-    /// <see cref="LLMConnect.Settings.LLMConnectClientOptions.Provider"/>, not by this property.
+    /// Reserved for future use.Currently the provider is determined by
+    /// <see cref = "LLMConnect.Settings.LLMConnectClientOptions.Provider" />, not by this property.
     /// </summary>
     //public string? Provider { get; set; }
 

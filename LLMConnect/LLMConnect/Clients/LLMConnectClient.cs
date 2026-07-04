@@ -54,7 +54,12 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
             "Using a user-supplied HttpClient. Retry logic must be configured by the caller.");
     }
 
-     public LLMConnectClient(LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions? endpointOpts)
+    /// <summary>
+    /// for the user to provide their own client already configured
+    /// </summary>
+    /// <param name="generalOpts">general options </param>
+    /// <param name="endpointOpts">endpoint-specific options</param>
+    public LLMConnectClient(LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions? endpointOpts)
         : this(generalOpts, endpointOpts ?? new LLMConnectEndpointOptions(), new HttpClient(new RetryDelegatingHandler(generalOpts.MaxRetries, generalOpts?.LoggerFactory?.CreateLogger<RetryDelegatingHandler>())
         {
             InnerHandler = new SocketsHttpHandler
