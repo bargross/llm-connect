@@ -16,11 +16,10 @@ internal static class ChatResponseMappingExtensions
         {
             Content = message?.Content ?? string.Empty,
             FinishReason = firstChoice?.FinishReason,
-            Usage = new EmbeddingUsage
+            Usage = new Usage
             {
                 InputTokens = response.Usage?.PromptTokens ?? 0,
-                OutputTokens = response.Usage?.CompletionTokens ?? 0,
-                TotalTokens = response.Usage?.TotalTokens ?? 0
+                OutputTokens = response.Usage?.CompletionTokens ?? 0
             },
             Model = response.Model,
             CreatedAt = response.Created.HasValue

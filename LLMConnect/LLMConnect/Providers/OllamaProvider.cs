@@ -24,8 +24,6 @@ internal class OllamaProvider(HttpClient httpClient, LLMConnectGeneralOptions ge
         if (!response.IsSuccessStatusCode)
             await LogAndThrow(generalOpts.Provider, response, cancellationToken);
 
-        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-
         return await DeserializeResponseAsync<OllamaChatResponse, ChatResponse>(
             response,
             generalOpts.Provider,
