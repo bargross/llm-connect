@@ -12,7 +12,7 @@ internal static class EmbeddingResponseMappingExtensions
             Embedding = embedding,
             Model = response.Model,
             Usage = response.Usage != null
-                ? new Usage
+                ? new EmbeddingUsage
                 {
                     InputTokens = response.Usage.PromptTokens,
                     OutputTokens = 0,

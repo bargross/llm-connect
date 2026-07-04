@@ -6,7 +6,7 @@ namespace LLMConnect;
 internal class AnthropicChatRequest
 {
     [JsonPropertyName("model")]
-    public string Model { get; set; } = string.Empty;
+    public string? Model { get; set; } = string.Empty;
 
     [JsonPropertyName("messages")]
     public List<AnthropicMessage> Messages { get; set; } = new();

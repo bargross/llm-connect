@@ -12,8 +12,6 @@ public class Usage
     /// <summary>The number of tokens in the generated output.</summary>
     public int OutputTokens { get; set; }
 
-    public int TotalTokens { get; set; }
-
     /// <summary>The total number of tokens used, computed as <see cref="InputTokens"/> + <see cref="OutputTokens"/>.</summary>
-    public int TotalTokenCount => InputTokens + OutputTokens;
+    public int TotalTokens => InputTokens + OutputTokens;
 }

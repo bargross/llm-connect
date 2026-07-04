@@ -13,7 +13,7 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectGeneralOptions ge
         _chatRequestValidator.Validate(request, _logger);
 
         var model = request.Model ?? generalOpts.InternalComputedDefaultModel(request.Model);
-        var url = EndpointRegistry.GetEndpointParams(QueryType.Chat, generalOpts.Provider).Replace("{model}", model);;
+        var url = EndpointRegistry.GetEndpointParams(QueryType.Chat, generalOpts.Provider).Replace("{model}", model);
 
         var googleRequest = request.ToGoogleRequest();
         var json = JsonSerializer.Serialize(googleRequest, DefaultJsonSerializerOptions);
@@ -81,8 +81,8 @@ internal class GoogleProvider(HttpClient httpClient, LLMConnectGeneralOptions ge
         var json = JsonSerializer.Serialize(googleRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var queryParams = EndpointRegistry.GetEndpointParams(QueryType.Embeddings, generalOpts.Provider);
-        var response = await httpClient.PostAsync(queryParams, content, cancellationToken);
+        var url = EndpointRegistry.GetEndpointParams(QueryType.Embeddings, generalOpts.Provider).Replace("{model}", model);
+        var response = await httpClient.PostAsync(url, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
             await LogAndThrow(generalOpts.Provider, response, cancellationToken);

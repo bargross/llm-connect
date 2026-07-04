@@ -23,8 +23,6 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectGeneralOptions
         if (!response.IsSuccessStatusCode)
             await LogAndThrow(generalOpts.Provider, response, cancellationToken);
 
-        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-
         return await DeserializeResponseAsync<AnthropicChatResponse, ChatResponse>(
             response,
             generalOpts.Provider,

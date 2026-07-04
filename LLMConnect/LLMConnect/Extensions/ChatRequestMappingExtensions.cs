@@ -41,7 +41,7 @@ internal static class ChatRequestMappingExtensions
 
         var openAiRequest = new OpenAIChatRequest
         {
-            Model = model ?? string.Empty,
+            Model = model,
             Messages = messages,
             Temperature = request.Temperature != 0.0f ? request.Temperature : null,
             TopP = request.TopP != 0.0f ? request.TopP : null,
