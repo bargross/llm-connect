@@ -73,7 +73,7 @@ internal static class ToolMappingExtensions
     }
 
     // ---------- Shared helper for building parameters ----------
-    private static Dictionary<string, object> BuildParametersDictionary(Tool tool)
+    internal static Dictionary<string, object> BuildParametersDictionary(Tool tool)
     {
         var dict = new Dictionary<string, object>
         {
@@ -116,7 +116,7 @@ internal static class ToolMappingExtensions
             return null;
 
         // Map to Google's modes
-        string mode = request.ToolChoice switch
+        var mode = request.ToolChoice switch
         {
             "auto" => "AUTO",
             "required" => "ANY",
@@ -134,9 +134,7 @@ internal static class ToolMappingExtensions
 
         // If a specific tool name is provided, set allowed_function_names
         if (mode == "ANY" && request.ToolChoice != "auto" && request.ToolChoice != "required" && request.ToolChoice != "none")
-        {
             config.FunctionCallingConfig.AllowedFunctionNames = new List<string> { request.ToolChoice };
-        }
 
         return config;
     }

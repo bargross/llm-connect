@@ -6,29 +6,38 @@ using System.Text.Json;
 
 namespace LLMConnect;
 
-internal class AnthropicProvider(HttpClient httpClient, LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts): ProviderBase<AnthropicProvider>(generalOpts!), ILLMProvider
+internal class AnthropicProvider: ProviderBase<AnthropicProvider>, ILLMProvider
 {
+    private readonly HttpClient _httpClient;
+    private readonly LLMConnectEndpointOptions _endpointOpts;
+
+    public AnthropicProvider(HttpClient httpClient, LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts) : base(generalOpts)
+    {
+        _httpClient = httpClient;
+        _endpointOpts = endpointOpts;
+    }
+
     public async Task<ChatResponse?> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
         _chatRequestValidator.Validate(request, _logger);
 
-        var anthropicRequest = request.ToAnthropicRequest(generalOpts.InternalComputedDefaultModel());
+        var anthropicRequest = request.ToAnthropicRequest(_generalOpts.InternalComputedDefaultModel());
 
         var json = JsonSerializer.Serialize(anthropicRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var url = EndpointRegistry.GetEndpointParams(QueryType.Chat, generalOpts.Provider);
-        var response = await httpClient.PostAsync(url, content, cancellationToken);
+        var url = EndpointRegistry.GetEndpointParams(QueryType.Chat, _generalOpts.Provider);
+        var response = await _httpClient.PostAsync(url, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-            await LogAndThrow(generalOpts.Provider, response, cancellationToken);
+            await LogAndThrow(_generalOpts.Provider, response, cancellationToken);
 
         return await DeserializeResponseAsync<AnthropicChatResponse, ChatResponse>(
             response,
-            generalOpts.Provider,
-            () => endpointOpts.HasEndpoint && endpointOpts.HasCustomChatDeserializer,
-            async anthropicResponseJsonString => await endpointOpts.ChatResponseDeserializer(anthropicResponseJsonString, cancellationToken),
-            anthropicResponse => anthropicResponse.ToChatResponse(),
+            _generalOpts.Provider,
+            () => _endpointOpts.HasEndpoint && _endpointOpts.HasCustomChatDeserializer,
+            async anthropicResponseJsonString => await _endpointOpts.ChatResponseDeserializer(anthropicResponseJsonString, cancellationToken),
+            anthropicResponse => anthropicResponse?.ToChatResponse(),
             cancellationToken);
     }
 
@@ -36,12 +45,12 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectGeneralOptions
     {
         _chatRequestValidator.Validate(request, _logger);
 
-        var anthropicRequest = request.ToAnthropicRequest(generalOpts.InternalComputedDefaultModel(request.Model));
+        var anthropicRequest = request.ToAnthropicRequest(_generalOpts.InternalComputedDefaultModel(request.Model));
 
         anthropicRequest.Stream = true;
 
-        var queryParams = EndpointRegistry.GetEndpointParams(QueryType.Chat, generalOpts.Provider);
-        var url = $"{httpClient.BaseAddress}{queryParams}";
+        var queryParams = EndpointRegistry.GetEndpointParams(QueryType.Chat, _generalOpts.Provider);
+        var url = $"{_httpClient.BaseAddress}{queryParams}";
 
         var json = JsonSerializer.Serialize(anthropicRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -50,14 +59,14 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectGeneralOptions
             Content = content
         };
 
-        var response = await httpClient.SendAsync(messageReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        var response = await _httpClient.SendAsync(messageReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-            await LogAndThrow(generalOpts.Provider, response, cancellationToken);
+            await LogAndThrow(_generalOpts.Provider, response, cancellationToken);
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
 
-        await foreach (var chunk in ReadFromStreamAsync(stream, generalOpts, endpointOpts, cancellationToken))
+        await foreach (var chunk in ReadFromStreamAsync(stream, _generalOpts, _endpointOpts, cancellationToken))
         {
             yield return chunk;
         }

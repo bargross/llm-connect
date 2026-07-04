@@ -1,4 +1,4 @@
-﻿namespace LLMConnect.Streams;
+﻿namespace LLMConnect;
 
 /// <summary>
 /// Defines a reader for streaming events from a stream.

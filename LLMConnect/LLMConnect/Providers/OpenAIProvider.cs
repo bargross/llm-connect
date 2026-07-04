@@ -6,29 +6,38 @@ using System.Text.Json;
 
 namespace LLMConnect;
 
-internal class OpenAIProvider(HttpClient httpClient, LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts): ProviderBase<OpenAIProvider>(generalOpts), ILLMProvider
+internal class OpenAIProvider: ProviderBase<OpenAIProvider>, ILLMProvider
 {
+    private readonly HttpClient _httpClient;
+    private readonly LLMConnectEndpointOptions _endpointOpts;
+
+    public OpenAIProvider(HttpClient httpClient, LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts) : base(generalOpts)
+    {
+        _httpClient = httpClient;
+        _endpointOpts = endpointOpts;
+    }
+
     public async Task<ChatResponse?> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
         _chatRequestValidator.Validate(request, _logger);
 
-        var openAiRequest = request.ToOpenAIRequest(generalOpts.InternalComputedDefaultModel());
+        var openAiRequest = request.ToOpenAIRequest(_generalOpts.InternalComputedDefaultModel());
         var json = JsonSerializer.Serialize(openAiRequest, DefaultJsonSerializerOptions);
 
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var url = EndpointRegistry.GetEndpointParams(QueryType.Chat, generalOpts.Provider);
-        var response = await httpClient.PostAsync(url, content, cancellationToken);
+        var url = EndpointRegistry.GetEndpointParams(QueryType.Chat, _generalOpts.Provider);
+        var response = await _httpClient.PostAsync(url, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-            await LogAndThrow(generalOpts.Provider, response, cancellationToken);
+            await LogAndThrow(_generalOpts.Provider, response, cancellationToken);
 
         return await DeserializeResponseAsync<OpenAIChatResponse, ChatResponse>(
             response,
-            generalOpts.Provider,
-            () => endpointOpts.HasEndpoint && endpointOpts.HasCustomChatDeserializer,
-            async openAIResponseJsonString => await endpointOpts.ChatResponseDeserializer(openAIResponseJsonString, cancellationToken),
-            openAiResponse => openAiResponse.ToChatResponse(),
+            _generalOpts.Provider,
+            () => _endpointOpts.HasEndpoint && _endpointOpts.HasCustomChatDeserializer,
+            async openAIResponseJsonString => await _endpointOpts.ChatResponseDeserializer(openAIResponseJsonString, cancellationToken),
+            openAiResponse => openAiResponse?.ToChatResponse(),
             cancellationToken);
     }
 
@@ -36,12 +45,12 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectGeneralOptions ge
     {
         _chatRequestValidator.Validate(request, _logger);
 
-        var openAiRequest = request.ToOpenAIRequest(generalOpts.InternalComputedDefaultModel(request.Model));
+        var openAiRequest = request.ToOpenAIRequest(_generalOpts.InternalComputedDefaultModel(request.Model));
 
         openAiRequest.Stream = true;
 
-        var queryParams = EndpointRegistry.GetEndpointParams(QueryType.Chat, generalOpts.Provider);
-        var url = $"{httpClient.BaseAddress}{queryParams}";
+        var queryParams = EndpointRegistry.GetEndpointParams(QueryType.Chat, _generalOpts.Provider);
+        var url = $"{_httpClient.BaseAddress}{queryParams}";
 
         var json = JsonSerializer.Serialize(openAiRequest, DefaultJsonSerializerOptions);
 
@@ -51,14 +60,14 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectGeneralOptions ge
             Content = content
         };
 
-        var response = await httpClient.SendAsync(messageReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        var response = await _httpClient.SendAsync(messageReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-            await LogAndThrow(generalOpts.Provider, response, cancellationToken);
+            await LogAndThrow(_generalOpts.Provider, response, cancellationToken);
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
 
-        await foreach (var chunk in ReadFromStreamAsync(stream, generalOpts, endpointOpts, cancellationToken))
+        await foreach (var chunk in ReadFromStreamAsync(stream, _generalOpts, _endpointOpts, cancellationToken))
         {
             yield return chunk;
         }
@@ -68,22 +77,22 @@ internal class OpenAIProvider(HttpClient httpClient, LLMConnectGeneralOptions ge
     {
         _embeddingRequestValidator?.Validate(request, _logger);
 
-        var openAiRequest = request.ToOpenAIRequest(generalOpts.InternalComputedDefaultModel(request.Model));
+        var openAiRequest = request.ToOpenAIRequest(_generalOpts.InternalComputedDefaultModel(request.Model));
         var json = JsonSerializer.Serialize(openAiRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var url = EndpointRegistry.GetEndpointParams(QueryType.Embeddings, generalOpts.Provider);
-        var response = await httpClient.PostAsync(url, content, cancellationToken);
+        var url = EndpointRegistry.GetEndpointParams(QueryType.Embeddings, _generalOpts.Provider);
+        var response = await _httpClient.PostAsync(url, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-            await LogAndThrow(generalOpts.Provider, response, cancellationToken);
+            await LogAndThrow(_generalOpts.Provider, response, cancellationToken);
 
         return await DeserializeResponseAsync<OpenAIEmbeddingResponse, EmbeddingResponse>(
             response,
-            generalOpts.Provider,
-            () => endpointOpts.HasEndpoint && endpointOpts.HasCustomEmbeddingDeserializer,
-            async openAIResponseJsonString => await endpointOpts.EmbeddingResponseDeserializer(openAIResponseJsonString, cancellationToken),
-            openAiResponse => openAiResponse.ToEmbeddingResponse(),
+            _generalOpts.Provider,
+            () => _endpointOpts.HasEndpoint && _endpointOpts.HasCustomEmbeddingDeserializer,
+            async openAIResponseJsonString => await _endpointOpts.EmbeddingResponseDeserializer(openAIResponseJsonString, cancellationToken),
+            openAiResponse => openAiResponse?.ToEmbeddingResponse(),
             cancellationToken);
     }
 }

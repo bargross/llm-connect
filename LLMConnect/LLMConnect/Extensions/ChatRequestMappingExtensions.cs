@@ -51,11 +51,10 @@ internal static class ChatRequestMappingExtensions
             PresencePenalty = request.PresencePenalty,
             ResponseFormat = request.ResponseFormat != null ? new OpenAIResponseFormat { Type = request.ResponseFormat } : null,
             Seed = request.Seed,
-            User = request.User
+            User = request.User,
+            Tools = request.MapOpenAITools(),
+            ToolChoice = request.MapOpenAIToolChoice()
         };
-
-        openAiRequest.Tools = request.MapOpenAITools();
-        openAiRequest.ToolChoice = request.MapOpenAIToolChoice();
 
         if (request.ExtraParameters != null && request.ExtraParameters.Count > 0)
             openAiRequest.ExtraData = new Dictionary<string, object>(request.ExtraParameters);

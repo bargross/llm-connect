@@ -1,35 +1,43 @@
 ﻿using LLMConnect.Models;
 using LLMConnect.Settings;
-using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 
 namespace LLMConnect;
 
-internal class OllamaProvider(HttpClient httpClient, LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts) : ProviderBase<OllamaProvider>(generalOpts), ILLMProvider
+internal class OllamaProvider: ProviderBase<OllamaProvider>, ILLMProvider
 {
+    private readonly HttpClient _httpClient;
+    private readonly LLMConnectEndpointOptions _endpointOpts;
+
+    public OllamaProvider(HttpClient httpClient, LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts) : base(generalOpts)
+    {
+        _httpClient = httpClient;
+        _endpointOpts = endpointOpts;
+    }
+
     public async Task<ChatResponse?> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
         _chatRequestValidator.Validate(request, _logger);
 
-        var ollamaRequest = request.ToOllamaRequest(generalOpts.InternalComputedDefaultModel(request.Model));
+        var ollamaRequest = request.ToOllamaRequest(_generalOpts.InternalComputedDefaultModel(request.Model));
         var json = JsonSerializer.Serialize(ollamaRequest, DefaultJsonSerializerOptions);
 
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var queryParams = EndpointRegistry.GetEndpointParams(QueryType.Chat, generalOpts.Provider);
-        var response = await httpClient.PostAsync(queryParams, content, cancellationToken);
+        var queryParams = EndpointRegistry.GetEndpointParams(QueryType.Chat, _generalOpts.Provider);
+        var response = await _httpClient.PostAsync(queryParams, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-            await LogAndThrow(generalOpts.Provider, response, cancellationToken);
+            await LogAndThrow(_generalOpts.Provider, response, cancellationToken);
 
         return await DeserializeResponseAsync<OllamaChatResponse, ChatResponse>(
             response,
-            generalOpts.Provider,
-            () => endpointOpts.HasEndpoint && endpointOpts.HasCustomChatDeserializer,
-            async ollamaResponseJsonString => await endpointOpts.ChatResponseDeserializer(ollamaResponseJsonString, cancellationToken),
-            ollamaResponse => ollamaResponse.ToChatResponse(),
+            _generalOpts.Provider,
+            () => _endpointOpts.HasEndpoint && _endpointOpts.HasCustomChatDeserializer,
+            async ollamaResponseJsonString => await _endpointOpts.ChatResponseDeserializer(ollamaResponseJsonString, cancellationToken),
+            ollamaResponse => ollamaResponse?.ToChatResponse(),
             cancellationToken);
     }
 
@@ -37,12 +45,12 @@ internal class OllamaProvider(HttpClient httpClient, LLMConnectGeneralOptions ge
     {
         _chatRequestValidator.Validate(request, _logger);
 
-        var ollamaRequest = request.ToOllamaRequest(generalOpts.InternalComputedDefaultModel(request.Model));
+        var ollamaRequest = request.ToOllamaRequest(_generalOpts.InternalComputedDefaultModel(request.Model));
 
         ollamaRequest.Stream = true;
 
-        var queryParams = EndpointRegistry.GetEndpointParams(QueryType.Chat, generalOpts.Provider);
-        var url = $"{httpClient.BaseAddress}{queryParams}";
+        var queryParams = EndpointRegistry.GetEndpointParams(QueryType.Chat, _generalOpts.Provider);
+        var url = $"{_httpClient.BaseAddress}{queryParams}";
 
         var json = JsonSerializer.Serialize(ollamaRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -51,13 +59,13 @@ internal class OllamaProvider(HttpClient httpClient, LLMConnectGeneralOptions ge
             Content = content
         };
 
-        var response = await httpClient.SendAsync(messageReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        var response = await _httpClient.SendAsync(messageReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-            await LogAndThrow(generalOpts.Provider, response, cancellationToken);
+            await LogAndThrow(_generalOpts.Provider, response, cancellationToken);
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        await foreach (var chunk in ReadFromStreamAsync(stream, generalOpts, endpointOpts, cancellationToken))
+        await foreach (var chunk in ReadFromStreamAsync(stream, _generalOpts, _endpointOpts, cancellationToken))
         {
             yield return chunk;
         }
@@ -67,22 +75,22 @@ internal class OllamaProvider(HttpClient httpClient, LLMConnectGeneralOptions ge
     {
         _embeddingRequestValidator?.Validate(request, _logger);
 
-        var ollamaRequest = request.ToOllamaRequest(generalOpts.InternalComputedDefaultModel(request.Model));
+        var ollamaRequest = request.ToOllamaRequest(_generalOpts.InternalComputedDefaultModel(request.Model));
         var json = JsonSerializer.Serialize(ollamaRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var url = EndpointRegistry.GetEndpointParams(QueryType.Embeddings, generalOpts.Provider);
-        var response = await httpClient.PostAsync(url, content, cancellationToken);
+        var url = EndpointRegistry.GetEndpointParams(QueryType.Embeddings, _generalOpts.Provider);
+        var response = await _httpClient.PostAsync(url, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-            await LogAndThrow(generalOpts.Provider, response, cancellationToken);
+            await LogAndThrow(_generalOpts.Provider, response, cancellationToken);
 
         return await DeserializeResponseAsync<OllamaEmbeddingResponse, EmbeddingResponse>(
             response,
-            generalOpts.Provider,
-            () => endpointOpts.HasEndpoint && endpointOpts.HasCustomEmbeddingDeserializer,
-            async ollamaResponseJsonString => await endpointOpts.EmbeddingResponseDeserializer(ollamaResponseJsonString, cancellationToken),
-            ollamaResponse => ollamaResponse.ToEmbeddingResponse(),
+            _generalOpts.Provider,
+            () => _endpointOpts.HasEndpoint && _endpointOpts.HasCustomEmbeddingDeserializer,
+            async ollamaResponseJsonString => await _endpointOpts.EmbeddingResponseDeserializer(ollamaResponseJsonString, cancellationToken),
+            ollamaResponse => ollamaResponse?.ToEmbeddingResponse(),
             cancellationToken);
     }
 }

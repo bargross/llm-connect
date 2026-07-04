@@ -1,5 +1,4 @@
 ﻿using LLMConnect.Models;
-using LLMConnect.Streams;
 using Microsoft.Extensions.Logging;
 
 namespace LLMConnect.Settings;

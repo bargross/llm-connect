@@ -5,7 +5,7 @@ namespace LLMConnect;
 internal static class EmbeddingRequestMappingExtensions
 {
     // ---------- OpenAI ----------
-    internal static OpenAIEmbeddingRequest ToOpenAIRequest(this EmbeddingRequest request, string? defaultModel = null)
+    internal static OpenAIEmbeddingRequest? ToOpenAIRequest(this EmbeddingRequest request, string? defaultModel = null)
     {
         if (request is null) return null;
 
@@ -38,7 +38,7 @@ internal static class EmbeddingRequestMappingExtensions
     }
 
     // ---------- Google ----------
-    internal static GoogleEmbeddingRequest ToGoogleRequest(this EmbeddingRequest request, string? defaultModel = null)
+    internal static GoogleEmbeddingRequest? ToGoogleRequest(this EmbeddingRequest request, string? defaultModel = null)
     {
         if (request is null) return null;
 
@@ -48,7 +48,7 @@ internal static class EmbeddingRequestMappingExtensions
             {
                 Parts = new List<GoogleEmbeddingPart>
                 {
-                    new GoogleEmbeddingPart { Text = request.Text }
+                    new GoogleEmbeddingPart { Text = request.Text ?? string.Empty}
                 },
                 Role = request.Role
             },
@@ -73,7 +73,7 @@ internal static class EmbeddingRequestMappingExtensions
     }
 
     // ---------- Ollama ----------
-    internal static OllamaEmbeddingRequest ToOllamaRequest(this EmbeddingRequest request, string? defaultModel = null)
+    internal static OllamaEmbeddingRequest? ToOllamaRequest(this EmbeddingRequest request, string? defaultModel = null)
     {
         if (request is null) return null;
 
@@ -86,7 +86,7 @@ internal static class EmbeddingRequestMappingExtensions
         };
 
         // Pass all extra parameters as options
-        if (request.ExtraParameters != null && request.ExtraParameters.Count > 0)
+        if (request?.ExtraParameters != null && request.ExtraParameters.Count > 0)
         {
             ollamaRequest.Options = new Dictionary<string, object>();
             foreach (var kvp in request.ExtraParameters)

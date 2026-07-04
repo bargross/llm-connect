@@ -1,5 +1,4 @@
 ﻿using LLMConnect.Models;
-using LLMConnect.Streams;
 
 namespace LLMConnect.Settings
 {

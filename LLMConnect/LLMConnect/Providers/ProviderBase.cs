@@ -10,6 +10,7 @@ namespace LLMConnect
 {
     internal abstract class ProviderBase<TProvider>(LLMConnectGeneralOptions generalOpts)
     {
+        protected readonly LLMConnectGeneralOptions _generalOpts = generalOpts;
         protected readonly ILogger<TProvider>? _logger = generalOpts.LoggerFactory?.CreateLogger<TProvider>();
         protected readonly IChatRequestValidator _chatRequestValidator = ChatRequestValidatorFactory.Create(generalOpts.Provider);
         protected readonly IEmbeddingRequestValidator? _embeddingRequestValidator = EmbeddingRequestValidatorFactory.Create(generalOpts.Provider);
@@ -62,7 +63,10 @@ namespace LLMConnect
             }
         }
 
-        public async Task LogAndThrow(ProviderType providerType, HttpResponseMessage response, CancellationToken cancellationToken)
+        public async Task LogAndThrow(
+            ProviderType providerType, 
+            HttpResponseMessage response,
+            CancellationToken cancellationToken)
         {
             var provider = providerType.ToString();
 
@@ -75,7 +79,11 @@ namespace LLMConnect
             throw exception;
         }
 
-        public async IAsyncEnumerable<ChatChunk> ReadFromStreamAsync(Stream stream, LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts, [EnumeratorCancellation] CancellationToken cancellationToken)
+        public async IAsyncEnumerable<ChatChunk> ReadFromStreamAsync(
+            Stream stream, 
+            LLMConnectGeneralOptions generalOpts, 
+            LLMConnectEndpointOptions endpointOpts, 
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             var reader = endpointOpts.HasEndpoint && endpointOpts.HasCustomReaderAndParser
                 ? endpointOpts.CustomStreamEventReaderFactory()

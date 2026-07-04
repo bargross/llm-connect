@@ -60,7 +60,11 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
     /// <param name="generalOpts">general options </param>
     /// <param name="endpointOpts">endpoint-specific options</param>
     public LLMConnectClient(LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions? endpointOpts)
-        : this(generalOpts, endpointOpts ?? new LLMConnectEndpointOptions(), new HttpClient(new RetryDelegatingHandler(generalOpts.MaxRetries, generalOpts?.LoggerFactory?.CreateLogger<RetryDelegatingHandler>())
+        : this(generalOpts, endpointOpts ?? new LLMConnectEndpointOptions(), 
+              new HttpClient(
+                  new RetryDelegatingHandler(
+                      generalOpts.MaxRetries, 
+                      generalOpts?.LoggerFactory?.CreateLogger<RetryDelegatingHandler>())
         {
             InnerHandler = new SocketsHttpHandler
             {
@@ -71,7 +75,7 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
         _ownsHttpClient = true;
 
         if (_logger is null)
-            _logger = generalOpts.LoggerFactory?.CreateLogger<LLMConnectClient>();
+            _logger = generalOpts?.LoggerFactory?.CreateLogger<LLMConnectClient>();
     }
 
     /// <summary>
