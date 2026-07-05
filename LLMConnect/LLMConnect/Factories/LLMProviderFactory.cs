@@ -19,7 +19,7 @@ internal class LLMProviderFactory
 
         _logger = generalOpts.LoggerFactory?.CreateLogger<LLMProviderFactory>();
 
-        LLMConnectOptionsValidator.Validate(generalOpts, endpointOpts, _logger);
+        OptionsValidator.Validate(generalOpts, endpointOpts, _logger);
     }
 
     public LLMProviderFactory(LLMConnectGeneralOptions? generalOpts, LLMConnectEndpointOptions? endpointOpts, IHttpClientFactory httpClientFactory)
@@ -30,7 +30,7 @@ internal class LLMProviderFactory
 
         _logger = generalOpts.LoggerFactory?.CreateLogger<LLMProviderFactory>();
 
-        LLMConnectOptionsValidator.Validate(generalOpts, endpointOpts, _logger);
+        OptionsValidator.Validate(generalOpts, endpointOpts, _logger);
     }
 
     public (HttpClient, ILLMProvider) CreateProvider()

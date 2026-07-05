@@ -10,10 +10,10 @@ namespace LLMConnect
                 : !string.IsNullOrWhiteSpace(options.DefaultModel) ? options.DefaultModel
                 : options.Provider switch
                 {
-                    ProviderType.Ollama => "llama3.2",
-                    ProviderType.Google => "gemini-2.0-flash",
-                    ProviderType.Anthropic => "claude-3-5-sonnet-20241022",
-                    ProviderType.OpenAI => "gpt-3.5-turbo",
+                    ProviderType.Ollama => "qwen2.5:7b-instruct",
+                    ProviderType.Google => "gemini-3.5-flash",
+                    ProviderType.Anthropic => "claude-sonnet-5",
+                    ProviderType.OpenAI => "gpt-5.5",
                     _ => throw new NotSupportedException($"Provider '{options.Provider}' is not supported.")
                 };
 

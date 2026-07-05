@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace LLMConnect.Validators.Options;
 
-internal class OllamaOptionsValidator : LLMConnectOptionsValidationBase, IOptionsValidator
+internal class OllamaOptionsValidator : OptionsValidationBase, IOptionsValidator
 {
     protected override void ValidateProviderSpecificGeneralOptions(LLMConnectGeneralOptions options, ILogger? logger = null)
     {

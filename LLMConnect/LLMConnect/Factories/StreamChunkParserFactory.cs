@@ -6,7 +6,7 @@ namespace LLMConnect;
 
 internal static class StreamChunkParserFactory
 {
-    public static IStreamChunkParser Create(ProviderType provider, LLMConnectGeneralOptions options)
+    public static IStreamChunkParser Create(ProviderType? provider, LLMConnectGeneralOptions options)
     {
         var logger = options.LoggerFactory?.CreateLogger("StreamChunkParserFactory");
 
@@ -18,7 +18,7 @@ internal static class StreamChunkParserFactory
             case ProviderType.Ollama: return new OllamaStreamChunkParser(options);
             default:
                 {
-                    var message = $"Provider '{provider.ToString()}' is not supported.";
+                    var message = $"Provider '{provider?.ToString()}' is not supported.";
 
                     logger?.LogError(message);
 

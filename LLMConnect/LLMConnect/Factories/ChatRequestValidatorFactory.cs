@@ -5,7 +5,7 @@ namespace LLMConnect
 {
     internal static class ChatRequestValidatorFactory
     {
-        public static IChatRequestValidator Create(ProviderType provider, ILogger? logger = null)
+        public static IChatRequestValidator Create(ProviderType? provider, ILogger? logger = null)
         {
             switch (provider)
             {
@@ -15,7 +15,7 @@ namespace LLMConnect
                 case ProviderType.Ollama: return new OllamaChatRequestValidator();
                 default:
                     {
-                        var message = $"Provider '{provider.ToString()}' is not supported.";
+                        var message = $"Provider '{provider?.ToString()}' is not supported.";
 
                         logger?.LogError(message);
 

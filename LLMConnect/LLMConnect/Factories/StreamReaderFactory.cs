@@ -6,7 +6,7 @@ namespace LLMConnect;
 
 internal static class StreamReaderFactory
 {
-    public static IStreamEventReader Create(ProviderType provider, LLMConnectGeneralOptions options)
+    public static IStreamEventReader Create(ProviderType? provider, LLMConnectGeneralOptions options)
     {
         var logger = options.LoggerFactory?.CreateLogger("StreamChunkParserFactory");
 
@@ -18,7 +18,7 @@ internal static class StreamReaderFactory
             case ProviderType.Ollama: return new NdjsonStreamEventReader(options);
             default:
                 {
-                    var message = $"Provider '{provider.ToString()}' is not supported.";
+                    var message = $"Provider '{provider?.ToString() }' is not supported.";
 
                     logger?.LogError(message);
 

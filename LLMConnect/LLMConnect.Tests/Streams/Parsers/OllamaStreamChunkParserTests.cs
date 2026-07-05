@@ -1,200 +1,231 @@
-﻿//using FluentAssertions;
-//using LLMConnect.Settings;
-//using Microsoft.Extensions.Logging;
-//using Moq;
-//using Xunit;
+﻿using FluentAssertions;
+using LLMConnect.Settings;
+using Microsoft.Extensions.Logging;
+using Moq;
+using System.Text.Json;
+using Xunit;
 
-//namespace LLMConnect.Tests.Streams.ChunkParsers;
+namespace LLMConnect.Tests.Streams.ChunkParsers;
 
-//public class OllamaStreamChunkParserTests
-//{
-//    private readonly Mock<ILogger> _loggerMock;
-//    private readonly LLMConnectClientOptions _options;
+public class OllamaStreamChunkParserTests
+{
+    private readonly Mock<ILogger<OllamaStreamChunkParser>> _loggerMock;
+    private readonly Mock<ILoggerFactory> _loggerFactoryMock;
+    private readonly LLMConnectGeneralOptions _options;
 
-//    public OllamaStreamChunkParserTests()
-//    {
-//        _loggerMock = new Mock<ILogger>();
-//        var loggerFactoryMock = new Mock<ILoggerFactory>();
-//        loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>()))
-//            .Returns(_loggerMock.Object);
+    public OllamaStreamChunkParserTests()
+    {
+        _loggerMock = new Mock<ILogger<OllamaStreamChunkParser>>();
+        _loggerFactoryMock = new Mock<ILoggerFactory>();
+        _loggerFactoryMock
+            .Setup(x => x.CreateLogger(It.IsAny<string>()))
+            .Returns(_loggerMock.Object);
 
-//        _options = new LLMConnectClientOptions
-//        {
-//            LoggerFactory = loggerFactoryMock.Object
-//        };
-//    }
+        _options = new LLMConnectGeneralOptions
+        {
+            LoggerFactory = _loggerFactoryMock.Object
+        };
+    }
 
-//    [Fact]
-//    public void Parse_WhenDataHasContentAndDoneFalse_ReturnsIncompleteChunk()
-//    {
-//        // Arrange
-//        var parser = new OllamaStreamChunkParser(_options);
-//        var json = @"{""message"":{""content"":""Hello""},""done"":false}";
-//        var evt = new StreamEvent(null, json);
+    // ---------- Content Chunks ----------
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithContentAndDoneFalse_ReturnsIncompleteChunk()
+    {
+        // Arrange
+        var parser = new OllamaStreamChunkParser(_options);
+        var json = @"{""message"":{""content"":""Hello""},""done"":false}";
+        var evt = new StreamEvent(null, json);
 
-//        // Assert
-//        result.Should().NotBeNull();
-//        result.Content.Should().Be("Hello");
-//        result.IsComplete.Should().BeFalse();
-//    }
+        // Act
+        var result = parser.Parse(evt);
 
-//    [Fact]
-//    public void Parse_WhenDataHasContentAndDoneTrue_ReturnsCompleteChunk()
-//    {
-//        // Arrange
-//        var parser = new OllamaStreamChunkParser(_options);
-//        var json = @"{""message"":{""content"":""Hello""},""done"":true}";
-//        var evt = new StreamEvent(null, json);
+        // Assert
+        result.Should().NotBeNull();
+        result.Content.Should().Be("Hello");
+        result.IsComplete.Should().BeFalse();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithContentAndDoneTrue_ReturnsCompleteChunk()
+    {
+        // Arrange
+        var parser = new OllamaStreamChunkParser(_options);
+        var json = @"{""message"":{""content"":""Hello""},""done"":true}";
+        var evt = new StreamEvent(null, json);
 
-//        // Assert
-//        result.Should().NotBeNull();
-//        result.Content.Should().Be("Hello");
-//        result.IsComplete.Should().BeTrue();
-//    }
+        // Act
+        var result = parser.Parse(evt);
 
-//    [Fact]
-//    public void Parse_WhenDataHasContentAndDoneNull_ReturnsIncompleteChunk()
-//    {
-//        // Arrange
-//        var parser = new OllamaStreamChunkParser(_options);
-//        var json = @"{""message"":{""content"":""Hello""}}";
-//        var evt = new StreamEvent(null, json);
+        // Assert
+        result.Should().NotBeNull();
+        result.Content.Should().Be("Hello");
+        result.IsComplete.Should().BeTrue();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithContentAndDoneNull_ReturnsIncompleteChunk()
+    {
+        // Arrange
+        var parser = new OllamaStreamChunkParser(_options);
+        var json = @"{""message"":{""content"":""Hello""}}";
+        var evt = new StreamEvent(null, json);
 
-//        // Assert
-//        result.Should().NotBeNull();
-//        result.Content.Should().Be("Hello");
-//        result.IsComplete.Should().BeFalse();
-//    }
+        // Act
+        var result = parser.Parse(evt);
 
-//    [Fact]
-//    public void Parse_WhenDataHasContentWithSpecialCharacters_ReturnsCorrectText()
-//    {
-//        // Arrange
-//        var parser = new OllamaStreamChunkParser(_options);
-//        var json = @"{""message"":{""content"":""Hello\nworld""},""done"":false}";
-//        var evt = new StreamEvent(null, json);
+        // Assert
+        result.Should().NotBeNull();
+        result.Content.Should().Be("Hello");
+        result.IsComplete.Should().BeFalse();
+    }
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithContentAndSpecialCharacters_ReturnsCorrectText()
+    {
+        // Arrange
+        var parser = new OllamaStreamChunkParser(_options);
+        var json = @"{""message"":{""content"":""Hello\nworld""},""done"":false}";
+        var evt = new StreamEvent(null, json);
 
-//        // Assert
-//        result.Should().NotBeNull();
-//        result.Content.Should().Be("Hello\nworld");
-//    }
+        // Act
+        var result = parser.Parse(evt);
 
-//    [Fact]
-//    public void Parse_WhenDataIsNullOrEmpty_ReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new OllamaStreamChunkParser(_options);
+        // Assert
+        result.Should().NotBeNull();
+        result.Content.Should().Be("Hello\nworld");
+    }
 
-//        // Act
-//        var result1 = parser.Parse(new StreamEvent(null, null!));
-//        var result2 = parser.Parse(new StreamEvent(null, ""));
+    // ---------- Completion Chunks (No Content) ----------
 
-//        // Assert
-//        result1.Should().BeNull();
-//        result2.Should().BeNull();
+    [Fact]
+    public void Parse_WithDoneTrueAndNoContent_ReturnsCompleteChunkWithEmptyContent()
+    {
+        // Arrange
+        var parser = new OllamaStreamChunkParser(_options);
+        var json = @"{""done"":true}";
+        var evt = new StreamEvent(null, json);
 
-//        // No log should be written
-//        _loggerMock.VerifyNoOtherCalls();
-//    }
+        // Act
+        var result = parser.Parse(evt);
 
-//    [Fact]
-//    public void Parse_WhenDataIsMalformedJson_LogsErrorAndReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new OllamaStreamChunkParser(_options);
-//        var malformedJson = "{message:{content:Hello},done:false}"; // Invalid JSON
-//        var evt = new StreamEvent(null, malformedJson);
+        // Assert
+        result.Should().NotBeNull();
+        result.Content.Should().BeEmpty();
+        result.IsComplete.Should().BeTrue();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithDoneTrueAndEmptyContent_ReturnsCompleteChunkWithEmptyContent()
+    {
+        // Arrange
+        var parser = new OllamaStreamChunkParser(_options);
+        var json = @"{""message"":{""content"":""""},""done"":true}";
+        var evt = new StreamEvent(null, json);
 
-//        // Assert
-//        result.Should().BeNull();
+        // Act
+        var result = parser.Parse(evt);
 
-//        // Verify logger was called with LogLevel.Information
-//        _loggerMock.Verify(
-//            x => x.Log(
-//                LogLevel.Information,
-//                It.IsAny<EventId>(),
-//                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Ignoring malformed chunks")),
-//                It.IsAny<Exception>(),
-//                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-//            Times.Once);
-//    }
+        // Assert
+        result.Should().NotBeNull();
+        result.Content.Should().BeEmpty();
+        result.IsComplete.Should().BeTrue();
+    }
 
-//    [Fact]
-//    public void Parse_WhenDataHasEmptyContent_ReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new OllamaStreamChunkParser(_options);
-//        var json = @"{""message"":{""content"":""""},""done"":false}";
-//        var evt = new StreamEvent(null, json);
+    // ---------- No Content and Not Done ----------
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithNoContentAndDoneFalse_ReturnsNull()
+    {
+        // Arrange
+        var parser = new OllamaStreamChunkParser(_options);
+        var json = @"{""done"":false}";
+        var evt = new StreamEvent(null, json);
 
-//        // Assert
-//        result.Should().BeNull();
-//        // No log should be written
-//        _loggerMock.VerifyNoOtherCalls();
-//    }
+        // Act
+        var result = parser.Parse(evt);
 
-//    [Fact]
-//    public void Parse_WhenDataHasNoMessage_ReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new OllamaStreamChunkParser(_options);
-//        var json = @"{""done"":false}";
-//        var evt = new StreamEvent(null, json);
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Act
-//        var result = parser.Parse(evt);
+    // ---------- Empty or Null Data ----------
 
-//        // Assert
-//        result.Should().BeNull();
-//    }
+    [Fact]
+    public void Parse_WithNullData_ReturnsNull()
+    {
+        // Arrange
+        var parser = new OllamaStreamChunkParser(_options);
+        var evt = new StreamEvent(null, null!);
 
-//    [Fact]
-//    public void Parse_WhenDataHasMessageButNoContent_ReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new OllamaStreamChunkParser(_options);
-//        var json = @"{""message"":{},""done"":false}";
-//        var evt = new StreamEvent(null, json);
+        // Act
+        var result = parser.Parse(evt);
 
-//        // Act
-//        var result = parser.Parse(evt);
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Assert
-//        result.Should().BeNull();
-//    }
+    [Fact]
+    public void Parse_WithEmptyData_ReturnsNull()
+    {
+        // Arrange
+        var parser = new OllamaStreamChunkParser(_options);
+        var evt = new StreamEvent(null, "");
 
-//    [Fact]
-//    public void Parse_WhenDataHasExtraFields_IgnoresThem()
-//    {
-//        // Arrange
-//        var parser = new OllamaStreamChunkParser(_options);
-//        var json = @"{""extra"":""value"",""message"":{""content"":""Hello""},""done"":false}";
-//        var evt = new StreamEvent(null, json);
+        // Act
+        var result = parser.Parse(evt);
 
-//        // Act
-//        var result = parser.Parse(evt);
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Assert
-//        result.Should().NotBeNull();
-//        result.Content.Should().Be("Hello");
-//        result.IsComplete.Should().BeFalse();
-//    }
-//}
+    // ---------- Malformed JSON ----------
+
+    [Fact]
+    public void Parse_WithMalformedJson_LogsAndReturnsNull()
+    {
+        // Arrange
+        var parser = new OllamaStreamChunkParser(_options);
+        var malformedJson = "{message:{content:Hello},done:false}";
+        var evt = new StreamEvent(null, malformedJson);
+
+        // Act
+        var result = parser.Parse(evt);
+
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.Verify(
+            x => x.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Ignoring malformed chunks")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    // ---------- Extra Fields ----------
+
+    [Fact]
+    public void Parse_WithExtraFields_IgnoresThem()
+    {
+        // Arrange
+        var parser = new OllamaStreamChunkParser(_options);
+        var json = @"{""extra"":""value"",""message"":{""content"":""Hello""},""done"":false}";
+        var evt = new StreamEvent(null, json);
+
+        // Act
+        var result = parser.Parse(evt);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Content.Should().Be("Hello");
+        result.IsComplete.Should().BeFalse();
+    }
+}

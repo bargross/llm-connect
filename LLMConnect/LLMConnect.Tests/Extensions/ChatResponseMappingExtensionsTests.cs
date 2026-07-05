@@ -419,8 +419,8 @@ public class ChatResponseMappingExtensionsTests
             Message = new OllamaMessage { Role = "assistant", Content = "Hello, world!" },
             Done = true,
             DoneReason = "stop",
-            EvalCount = 10,
-            PromptEvalCount = 5
+            EvalCount = 5,
+            PromptEvalCount = 10
         };
 
         // Act

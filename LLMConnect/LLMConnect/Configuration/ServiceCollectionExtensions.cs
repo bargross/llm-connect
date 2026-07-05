@@ -26,7 +26,6 @@ public static class ServiceCollectionExtensions
     {
         services.Configure(configure ?? (_ => { }));
 
-        // Register the named HttpClient (only once)
         RegisterCoreServices(services);
 
         services.AddSingleton<ILLMConnectClient>(sp =>
@@ -39,6 +38,7 @@ public static class ServiceCollectionExtensions
     }
 
 
+
     /// <summary>
     /// Adds LLMConnect services to the IServiceCollection with separate configuration for general and endpoint options.
     /// </summary>
@@ -48,11 +48,11 @@ public static class ServiceCollectionExtensions
     /// <returns>The IServiceCollection with the added services.</returns>
     public static IServiceCollection AddLLMConnect(
         this IServiceCollection services,
-        Action<LLMConnectGeneralOptions>? configureGeneral = null,
-        Action<LLMConnectEndpointOptions>? configureEndpoint = null)
+        Action<LLMConnectGeneralOptions> configureGeneral,
+        Action<LLMConnectEndpointOptions> configureEndpoint)
     {
-        services.Configure(configureGeneral ?? (_ => { }));
-        services.Configure(configureEndpoint ?? (_ => { }));
+        services.Configure(configureGeneral);
+        services.Configure(configureEndpoint);
 
         RegisterCoreServices(services);
 
@@ -67,6 +67,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+
     /// <summary>
     /// Adds LLMConnect services to the IServiceCollection with a configuration action for general options only.
     /// </summary>
@@ -76,7 +77,21 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddLLMConnect(
         this IServiceCollection services,
         Action<LLMConnectGeneralOptions> configureGeneral)
-        => services.AddLLMConnect(configureGeneral, null);
+    {
+        services.Configure(configureGeneral);
+
+        RegisterCoreServices(services);
+
+        services.AddSingleton<ILLMConnectClient>(sp =>
+        {
+            var general = sp.GetRequiredService<IOptions<LLMConnectGeneralOptions>>().Value;
+            // Default endpoint options are created by the client's constructor
+            return new LLMConnectClient(general, new LLMConnectEndpointOptions());
+        });
+
+        return services;
+    }
+
 
     // ---------- Core registration (safe, once) ----------
 

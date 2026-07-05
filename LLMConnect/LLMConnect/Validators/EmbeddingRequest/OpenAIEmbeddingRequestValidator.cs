@@ -8,11 +8,10 @@ internal class OpenAIEmbeddingRequestValidator : EmbeddingRequestValidatorBase
     protected override void ValidateProviderSpecific(EmbeddingRequest request, ILogger? logger)
     {
         // OpenAI supports "float" or "base64" encoding format
-        if (!string.IsNullOrEmpty(request.EncodingFormat) &&
-            request.EncodingFormat != "float" &&
-            request.EncodingFormat != "base64")
+        if (request.EncodingFormat != "float" && request.EncodingFormat != "base64")
         {
             logger?.LogError("EncodingFormat must be 'float' or 'base64'.");
+            
             throw new ArgumentException("EncodingFormat must be 'float' or 'base64'.", nameof(request.EncodingFormat));
         }
 

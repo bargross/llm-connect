@@ -1,212 +1,203 @@
-﻿//using FluentAssertions;
-//using LLMConnect.Models;
-//using LLMConnect.Settings;
-//using LLMConnect.Validators.Options;
-//using Microsoft.Extensions.Logging;
-//using Moq;
+﻿using FluentAssertions;
+using LLMConnect.Models;
+using LLMConnect.Settings;
+using LLMConnect.Validators.Options;
+using Microsoft.Extensions.Logging;
+using Moq;
 
-//namespace LLMConnect.Tests.Validators.Options;
+namespace LLMConnect.Tests.Validators.Options;
 
-//public class OllamaOptionsValidatorTests
-//{
-//    private readonly OllamaOptionsValidator _validator;
-//    private readonly Mock<ILogger> _loggerMock;
+public class OllamaOptionsValidatorTests
+{
+    private readonly Mock<ILogger> _loggerMock;
+    private readonly OllamaOptionsValidator _validator;
 
-//    public OllamaOptionsValidatorTests()
-//    {
-//        _validator = new OllamaOptionsValidator();
-//        _loggerMock = new Mock<ILogger>();
-//    }
+    public OllamaOptionsValidatorTests()
+    {
+        _loggerMock = new Mock<ILogger>();
+        _validator = new OllamaOptionsValidator();
+    }
 
-//    [Fact]
-//    public void Validate_WhenOllamaPortIsNull_DoesNotThrow()
-//    {
-//        // Arrange
-//        var options = new LLMConnectClientOptions
-//        {
-//            Provider = ProviderType.Ollama,
-//            Timeout = TimeSpan.FromSeconds(30),
-//            MaxRetries = 3,
-//            OllamaPort = null
-//        };
+    // ---------- Port Validation ----------
 
-//        // Act
-//        Action act = () => _validator.Validate(options, _loggerMock.Object);
+    [Theory]
+    [InlineData(1)]
+    [InlineData(11434)]
+    [InlineData(65535)]
+    public void Validate_WhenOllamaPortValid_DoesNotThrow(int validPort)
+    {
+        var general = new LLMConnectGeneralOptions { Provider = ProviderType.Ollama };
+        var endpoint = new LLMConnectEndpointOptions { OllamaPort = validPort };
 
-//        // Assert
-//        act.Should().NotThrow();
-//        _loggerMock.Verify(l => l.Log(
-//            LogLevel.Error,
-//            It.IsAny<EventId>(),
-//            It.IsAny<It.IsAnyType>(),
-//            null,
-//            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-//            Times.Never);
-//    }
+        Action act = () => _validator.Validate(general, endpoint, _loggerMock.Object);
 
-//    [Theory]
-//    [InlineData(1)]
-//    [InlineData(11434)]
-//    [InlineData(65535)]
-//    public void Validate_WhenOllamaPortIsValid_DoesNotThrow(int validPort)
-//    {
-//        // Arrange
-//        var options = new LLMConnectClientOptions
-//        {
-//            Provider = ProviderType.Ollama,
-//            Timeout = TimeSpan.FromSeconds(30),
-//            MaxRetries = 3,
-//            OllamaPort = validPort
-//        };
+        act.Should().NotThrow();
+        _loggerMock.Verify(x => x.Log(
+            LogLevel.Error,
+            It.IsAny<EventId>(),
+            It.IsAny<It.IsAnyType>(),
+            null,
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Never);
+    }
 
-//        // Act
-//        Action act = () => _validator.Validate(options, _loggerMock.Object);
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(-100)]
+    public void Validate_WhenOllamaPortLessThanOne_ThrowsArgumentException(int invalidPort)
+    {
+        var general = new LLMConnectGeneralOptions { Provider = ProviderType.Ollama };
+        var endpoint = new LLMConnectEndpointOptions { OllamaPort = invalidPort };
 
-//        // Assert
-//        act.Should().NotThrow();
-//        _loggerMock.Verify(l => l.Log(
-//            LogLevel.Error,
-//            It.IsAny<EventId>(),
-//            It.IsAny<It.IsAnyType>(),
-//            null,
-//            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-//            Times.Never);
-//    }
+        Action act = () => _validator.Validate(general, endpoint, _loggerMock.Object);
 
-//    [Theory]
-//    [InlineData(0)]
-//    [InlineData(-1)]
-//    [InlineData(-100)]
-//    public void Validate_WhenOllamaPortIsLessThanOne_ThrowsArgumentException(int invalidPort)
-//    {
-//        // Arrange
-//        var options = new LLMConnectClientOptions
-//        {
-//            Provider = ProviderType.Ollama,
-//            Timeout = TimeSpan.FromSeconds(30),
-//            MaxRetries = 3,
-//            OllamaPort = invalidPort
-//        };
+        act.Should().Throw<ArgumentException>()
+            .WithParameterName(nameof(LLMConnectEndpointOptions.OllamaPort))
+            .WithMessage($"Invalid port: {invalidPort}. Must be between 1 and 65535.*");
+        _loggerMock.Verify(x => x.Log(
+            LogLevel.Error,
+            It.IsAny<EventId>(),
+            It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains($"Invalid port: {invalidPort}. Must be between 1 and 65535.")),
+            null,
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
 
-//        // Act
-//        Action act = () => _validator.Validate(options, _loggerMock.Object);
+    [Theory]
+    [InlineData(65536)]
+    [InlineData(100000)]
+    public void Validate_WhenOllamaPortGreaterThanMax_ThrowsArgumentException(int invalidPort)
+    {
+        var general = new LLMConnectGeneralOptions { Provider = ProviderType.Ollama };
+        var endpoint = new LLMConnectEndpointOptions { OllamaPort = invalidPort };
 
-//        // Assert
-//        act.Should().Throw<ArgumentException>()
-//            .WithParameterName(nameof(LLMConnectClientOptions.OllamaPort))
-//            .WithMessage($"Invalid port: {invalidPort}. Must be between 1 and 65535.*");
+        Action act = () => _validator.Validate(general, endpoint, _loggerMock.Object);
 
-//        _loggerMock.Verify(l => l.Log(
-//            LogLevel.Error,
-//            It.IsAny<EventId>(),
-//            It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains($"Invalid port: {invalidPort}. Must be between 1 and 65535.")),
-//            null,
-//            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-//            Times.Once);
-//    }
+        act.Should().Throw<ArgumentException>()
+            .WithParameterName(nameof(LLMConnectEndpointOptions.OllamaPort))
+            .WithMessage($"Invalid port: {invalidPort}. Must be between 1 and 65535.*");
+        _loggerMock.Verify(x => x.Log(
+            LogLevel.Error,
+            It.IsAny<EventId>(),
+            It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains($"Invalid port: {invalidPort}. Must be between 1 and 65535.")),
+            null,
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
 
-//    [Theory]
-//    [InlineData(65536)]
-//    [InlineData(100000)]
-//    public void Validate_WhenOllamaPortIsGreaterThanMax_ThrowsArgumentException(int invalidPort)
-//    {
-//        // Arrange
-//        var options = new LLMConnectClientOptions
-//        {
-//            Provider = ProviderType.Ollama,
-//            Timeout = TimeSpan.FromSeconds(30),
-//            MaxRetries = 3,
-//            OllamaPort = invalidPort
-//        };
+    [Fact]
+    public void Validate_WhenOllamaPortNull_DoesNotThrow()
+    {
+        var general = new LLMConnectGeneralOptions { Provider = ProviderType.Ollama };
+        var endpoint = new LLMConnectEndpointOptions { OllamaPort = null };
 
-//        // Act
-//        Action act = () => _validator.Validate(options, _loggerMock.Object);
+        Action act = () => _validator.Validate(general, endpoint, _loggerMock.Object);
 
-//        // Assert
-//        act.Should().Throw<ArgumentException>()
-//            .WithParameterName(nameof(LLMConnectClientOptions.OllamaPort))
-//            .WithMessage($"Invalid port: {invalidPort}. Must be between 1 and 65535.*");
+        act.Should().NotThrow();
+        _loggerMock.Verify(x => x.Log(
+            LogLevel.Error,
+            It.IsAny<EventId>(),
+            It.IsAny<It.IsAnyType>(),
+            null,
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Never);
+    }
 
-//        _loggerMock.Verify(l => l.Log(
-//            LogLevel.Error,
-//            It.IsAny<EventId>(),
-//            It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains($"Invalid port: {invalidPort}. Must be between 1 and 65535.")),
-//            null,
-//            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-//            Times.Once);
-//    }
+    // ---------- Base Validation (API Key Not Required) ----------
 
-//    [Fact]
-//    public void Validate_WhenAllOptionsAreValid_DoesNotLogErrors()
-//    {
-//        // Arrange
-//        var options = new LLMConnectClientOptions
-//        {
-//            Provider = ProviderType.Ollama,
-//            Timeout = TimeSpan.FromSeconds(30),
-//            MaxRetries = 3,
-//            OllamaPort = 11434,
-//            Endpoint = "http://localhost:11434"
-//        };
+    [Fact]
+    public void Validate_WhenApiKeyMissingForOllama_DoesNotThrow()
+    {
+        var general = new LLMConnectGeneralOptions { Provider = ProviderType.Ollama, ApiKey = null };
+        var endpoint = new LLMConnectEndpointOptions();
 
-//        // Act
-//        _validator.Validate(options, _loggerMock.Object);
+        Action act = () => _validator.Validate(general, endpoint, _loggerMock.Object);
 
-//        // Assert
-//        _loggerMock.Verify(l => l.Log(
-//            LogLevel.Error,
-//            It.IsAny<EventId>(),
-//            It.IsAny<It.IsAnyType>(),
-//            null,
-//            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-//            Times.Never);
-//    }
+        act.Should().NotThrow();
+        _loggerMock.Verify(x => x.Log(
+            LogLevel.Error,
+            It.IsAny<EventId>(),
+            It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Missing api key")),
+            null,
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Never);
+    }
 
-//    [Fact]
-//    public void Validate_WhenLoggerIsNull_DoesNotThrow()
-//    {
-//        // Arrange
-//        var options = new LLMConnectClientOptions
-//        {
-//            Provider = ProviderType.Ollama,
-//            Timeout = TimeSpan.FromSeconds(30),
-//            MaxRetries = 3,
-//            OllamaPort = 11434
-//        };
+    // ---------- Other General Validation (Timeout, MaxRetries, etc.) ----------
 
-//        // Act
-//        Action act = () => _validator.Validate(options, null);
+    [Fact]
+    public void Validate_WhenTimeoutZero_ThrowsArgumentException()
+    {
+        var general = new LLMConnectGeneralOptions
+        {
+            Provider = ProviderType.Ollama,
+            Timeout = TimeSpan.Zero,
+            MaxRetries = 3
+        };
+        var endpoint = new LLMConnectEndpointOptions();
 
-//        // Assert
-//        act.Should().NotThrow();
-//    }
+        Action act = () => _validator.Validate(general, endpoint, _loggerMock.Object);
 
-//    [Fact]
-//    public void Validate_WhenBaseValidationFails_ThrowsBeforeProviderSpecificValidation()
-//    {
-//        // Arrange: invalid timeout (base validation fails first)
-//        var options = new LLMConnectClientOptions
-//        {
-//            Provider = ProviderType.Ollama,
-//            Timeout = TimeSpan.Zero, // Invalid
-//            MaxRetries = 3,
-//            OllamaPort = 11434
-//        };
+        act.Should().Throw<ArgumentException>()
+            .WithParameterName(nameof(LLMConnectGeneralOptions.Timeout))
+            .WithMessage("Timeout must be greater than zero.*");
+        _loggerMock.Verify(x => x.Log(
+            LogLevel.Error,
+            It.IsAny<EventId>(),
+            It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Timeout must be greater than zero")),
+            null,
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
 
-//        // Act
-//        Action act = () => _validator.Validate(options, _loggerMock.Object);
+    [Fact]
+    public void Validate_WhenMaxRetriesNegative_ThrowsArgumentException()
+    {
+        var general = new LLMConnectGeneralOptions
+        {
+            Provider = ProviderType.Ollama,
+            ApiKey = null,
+            MaxRetries = -1
+        };
+        var endpoint = new LLMConnectEndpointOptions();
 
-//        // Assert
-//        act.Should().Throw<ArgumentException>()
-//            .WithParameterName(nameof(LLMConnectClientOptions.Timeout));
+        Action act = () => _validator.Validate(general, endpoint, _loggerMock.Object);
 
-//        // Provider-specific error should NOT be logged because base validation fails first
-//        _loggerMock.Verify(l => l.Log(
-//            LogLevel.Error,
-//            It.IsAny<EventId>(),
-//            It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Invalid port")),
-//            null,
-//            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-//            Times.Never);
-//    }
-//}
+        act.Should().Throw<ArgumentException>()
+            .WithParameterName(nameof(LLMConnectGeneralOptions.MaxRetries))
+            .WithMessage("MaxRetries must be >= 0.*");
+        _loggerMock.Verify(x => x.Log(
+            LogLevel.Error,
+            It.IsAny<EventId>(),
+            It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("MaxRetries must be >= 0")),
+            null,
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    // ---------- Logger Null ----------
+
+    [Fact]
+    public void Validate_WhenLoggerIsNull_DoesNotThrow()
+    {
+        var general = new LLMConnectGeneralOptions { Provider = ProviderType.Ollama, ApiKey = null };
+        var endpoint = new LLMConnectEndpointOptions { OllamaPort = 11434 };
+
+        Action act = () => _validator.Validate(general, endpoint, null);
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Validate_WhenInvalidAndLoggerIsNull_StillThrows()
+    {
+        var general = new LLMConnectGeneralOptions { Provider = ProviderType.Ollama };
+        var endpoint = new LLMConnectEndpointOptions { OllamaPort = 0 };
+
+        Action act = () => _validator.Validate(general, endpoint, null);
+
+        act.Should().Throw<ArgumentException>()
+            .WithParameterName(nameof(LLMConnectEndpointOptions.OllamaPort));
+    }
+}

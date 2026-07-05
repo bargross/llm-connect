@@ -61,7 +61,7 @@ internal static class HttpClientConfigurator
         if (!string.IsNullOrWhiteSpace(optionsEndpoint))
             return optionsEndpoint;
 
-        var endpoint = EndpointRegistry.GetDefaultEndpoint(options.Provider, options.LoggerFactory?.CreateLogger("EndpointRegistry"));
+        var endpoint = EndpointRegistry.GetDefaultEndpoint(options.Provider, ollamaPort, options.LoggerFactory?.CreateLogger("EndpointRegistry"));
 
         if (options.Provider == ProviderType.Ollama)
         {

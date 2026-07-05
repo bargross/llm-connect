@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 internal static class OptionsValidatorFactory
 {
-    public static IOptionsValidator Create(ProviderType provider, ILogger? logger = null)
+    public static IOptionsValidator Create(ProviderType? provider, ILogger? logger = null)
     {
         switch (provider)
         {
@@ -14,7 +14,7 @@ internal static class OptionsValidatorFactory
             case ProviderType.Ollama: return new OllamaOptionsValidator();
             default:
                 {
-                    var message = $"Provider '{provider.ToString()}' is not supported.";
+                    var message = $"Provider '{provider?.ToString()}' is not supported.";
 
                     logger?.LogError(message);
 

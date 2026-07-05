@@ -64,11 +64,11 @@ namespace LLMConnect
         }
 
         public async Task LogAndThrow(
-            ProviderType providerType, 
+            ProviderType? providerType, 
             HttpResponseMessage response,
             CancellationToken cancellationToken)
         {
-            var provider = providerType.ToString();
+            var provider = providerType?.ToString() ?? "unknown";
 
             var errorMessage = await ExtractErrorMessage(response, cancellationToken);
 
@@ -103,7 +103,7 @@ namespace LLMConnect
 
         protected async Task<TResponse?> DeserializeResponseAsync<TProviderResponse, TResponse>(
             HttpResponseMessage response,
-            ProviderType provider,
+            ProviderType? provider,
             Func<bool> customDeserializerEvaluator,
             Func<string, Task<TResponse?>> jsonStringToResponse,
             Func<TProviderResponse?, TResponse?> toChatResponse,
@@ -129,7 +129,7 @@ namespace LLMConnect
 
             var chatResponse = toChatResponse.Invoke(providerResponse);
             if (chatResponse == null)
-                throw new LLMConnectException(provider.ToString(), "Failed to deserialize response.");
+                throw new LLMConnectException(provider?.ToString() ?? "unknown", "Failed to deserialize response.");
 
             return chatResponse;
         }

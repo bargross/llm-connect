@@ -26,7 +26,7 @@ internal class OpenAIProvider: ProviderBase<OpenAIProvider>, ILLMProvider
 
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var url = EndpointRegistry.GetEndpointParams(QueryType.Chat, _generalOpts.Provider);
+        var url = EndpointRegistry.GetEndpointParams(_generalOpts.Provider, QueryType.Chat, false, _logger);
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
@@ -49,7 +49,7 @@ internal class OpenAIProvider: ProviderBase<OpenAIProvider>, ILLMProvider
 
         openAiRequest.Stream = true;
 
-        var queryParams = EndpointRegistry.GetEndpointParams(QueryType.Chat, _generalOpts.Provider);
+        var queryParams = EndpointRegistry.GetEndpointParams(_generalOpts.Provider, QueryType.Chat, true, _logger);
         var url = $"{_httpClient.BaseAddress}{queryParams}";
 
         var json = JsonSerializer.Serialize(openAiRequest, DefaultJsonSerializerOptions);
@@ -81,7 +81,7 @@ internal class OpenAIProvider: ProviderBase<OpenAIProvider>, ILLMProvider
         var json = JsonSerializer.Serialize(openAiRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var url = EndpointRegistry.GetEndpointParams(QueryType.Embeddings, _generalOpts.Provider);
+        var url = EndpointRegistry.GetEndpointParams(_generalOpts.Provider, QueryType.Embeddings, false, _logger);
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)

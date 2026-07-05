@@ -57,7 +57,6 @@ internal class SseStreamEventReader : IStreamEventReader
                 }
 
                 yield return new StreamEvent(currentEvent, data);
-                currentEvent = null; // Reset after yielding
             }
         }
     }

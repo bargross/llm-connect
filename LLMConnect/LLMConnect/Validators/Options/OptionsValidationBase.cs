@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace LLMConnect.Validators.Options;
 
-internal abstract class LLMConnectOptionsValidationBase
+internal abstract class OptionsValidationBase
 {
     public virtual void Validate(LLMConnectGeneralOptions generalOptions, LLMConnectEndpointOptions endpointOptions, ILogger? logger = null)
     {
@@ -13,6 +13,15 @@ internal abstract class LLMConnectOptionsValidationBase
 
         if (endpointOptions == null)
             throw new ArgumentNullException(nameof(endpointOptions));
+
+        if (generalOptions.Provider == null)
+        {
+            var errorMessage = "Provider must be specified.";
+     
+            logger?.LogError(errorMessage);
+
+            throw new ArgumentException(errorMessage, nameof(generalOptions.Provider));
+        }
 
         ValidateApiKey(generalOptions, logger);
 
@@ -47,14 +56,15 @@ internal abstract class LLMConnectOptionsValidationBase
         ValidateProviderSpecificEndpointOptions(endpointOptions, logger);
     }
 
-    protected virtual void ValidateEndpoint(LLMConnectEndpointOptions endpointOpts, ProviderType provider, ILogger? logger = null)
+    protected virtual void ValidateEndpoint(LLMConnectEndpointOptions endpointOpts, ProviderType? provider, ILogger? logger = null)
     {
         if (string.IsNullOrWhiteSpace(endpointOpts.Endpoint))
             return;
 
         if (!Uri.IsWellFormedUriString(endpointOpts.Endpoint, UriKind.Absolute))
         {
-            var errorMessage = $"Invalid endpoint URL: {endpointOpts.Endpoint} for provider {provider.ToString()}";
+            var errorMessage = $"Invalid endpoint URL: {endpointOpts.Endpoint} for provider {provider?.ToString()}";
+
             logger?.LogError(errorMessage);
 
             throw new ArgumentException(errorMessage, nameof(endpointOpts.Endpoint));
@@ -66,7 +76,7 @@ internal abstract class LLMConnectOptionsValidationBase
             genericProviderEndpoint.Host != "localhost" &&
             genericProviderEndpoint.Host != "127.0.0.1")
         {
-            var errorMessage = $"Endpoint must use HTTPS for provider '{provider.ToString()}'.";
+            var errorMessage = $"Endpoint must use HTTPS for provider '{provider?.ToString()}'.";
             logger?.LogError(errorMessage);
 
             throw new ArgumentException(errorMessage, nameof(endpointOpts.Endpoint));

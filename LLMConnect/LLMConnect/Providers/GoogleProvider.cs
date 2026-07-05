@@ -22,7 +22,8 @@ internal class GoogleProvider: ProviderBase<GoogleProvider>, ILLMProvider
         _chatRequestValidator.Validate(request, _logger);
 
         var model = request.Model ?? _generalOpts.InternalComputedDefaultModel(request.Model);
-        var url = EndpointRegistry.GetEndpointParams(QueryType.Chat, _generalOpts.Provider).Replace("{model}", model);
+        var url = EndpointRegistry.GetEndpointParams(_generalOpts.Provider, QueryType.Chat, false)
+            .Replace("{model}", model);
 
         var googleRequest = request.ToGoogleRequest();
         var json = JsonSerializer.Serialize(googleRequest, DefaultJsonSerializerOptions);
@@ -49,9 +50,10 @@ internal class GoogleProvider: ProviderBase<GoogleProvider>, ILLMProvider
         var model = request.Model ?? _generalOpts.InternalComputedDefaultModel(request.Model);
 
         // google streaming endpoint is different from the normal endpoint, so we need to handle it separately
-        var queryParams = EndpointRegistry.GetEndpointParams(QueryType.Chat, _generalOpts.Provider);
+        var queryParams = EndpointRegistry.GetEndpointParams(_generalOpts.Provider, QueryType.Chat, true, _logger);
+
         var endpoint = _endpointOpts.HasEndpoint ? _endpointOpts.Endpoint 
-            : $"{_httpClient.BaseAddress}{queryParams.Replace("{model}", model)}/streamGenerateContent";
+            : $"{_httpClient.BaseAddress}{queryParams.Replace("{model}", model)}";
 
         if (!endpoint.Contains("alt=sse"))
             endpoint += (endpoint.Contains('?') ? "&" : "?") + "alt=sse";
@@ -88,7 +90,7 @@ internal class GoogleProvider: ProviderBase<GoogleProvider>, ILLMProvider
         var json = JsonSerializer.Serialize(googleRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var url = EndpointRegistry.GetEndpointParams(QueryType.Embeddings, _generalOpts.Provider).Replace("{model}", model);
+        var url = EndpointRegistry.GetEndpointParams(_generalOpts.Provider, QueryType.Embeddings, false, _logger).Replace("{model}", model);
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)

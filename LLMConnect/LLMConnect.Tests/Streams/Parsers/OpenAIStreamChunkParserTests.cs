@@ -1,210 +1,253 @@
-﻿//using FluentAssertions;
-//using LLMConnect.Settings;
-//using Microsoft.Extensions.Logging;
-//using Moq;
-//using Xunit;
+﻿using FluentAssertions;
+using LLMConnect.Settings;
+using Microsoft.Extensions.Logging;
+using Moq;
+using System.Text.Json;
+using Xunit;
 
-//namespace LLMConnect.Tests.Streams.ChunkParsers;
+namespace LLMConnect.Tests.Streams.ChunkParsers;
 
-//public class OpenAIStreamChunkParserTests
-//{
-//    private readonly Mock<ILogger> _loggerMock;
-//    private readonly LLMConnectClientOptions _options;
+public class OpenAIStreamChunkParserTests
+{
+    private readonly Mock<ILogger<OpenAIStreamChunkParser>> _loggerMock;
+    private readonly Mock<ILoggerFactory> _loggerFactoryMock;
+    private readonly LLMConnectGeneralOptions _options;
 
-//    public OpenAIStreamChunkParserTests()
-//    {
-//        _loggerMock = new Mock<ILogger>();
-//        var loggerFactoryMock = new Mock<ILoggerFactory>();
-//        loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>()))
-//            .Returns(_loggerMock.Object);
+    public OpenAIStreamChunkParserTests()
+    {
+        _loggerMock = new Mock<ILogger<OpenAIStreamChunkParser>>();
+        _loggerFactoryMock = new Mock<ILoggerFactory>();
+        _loggerFactoryMock
+            .Setup(x => x.CreateLogger(It.IsAny<string>()))
+            .Returns(_loggerMock.Object);
 
-//        _options = new LLMConnectClientOptions
-//        {
-//            LoggerFactory = loggerFactoryMock.Object
-//        };
-//    }
+        _options = new LLMConnectGeneralOptions
+        {
+            LoggerFactory = _loggerFactoryMock.Object
+        };
+    }
 
-//    [Fact]
-//    public void Parse_WhenDataHasDeltaContent_ReturnsChatChunk()
-//    {
-//        // Arrange
-//        var parser = new OpenAIStreamChunkParser(_options);
-//        var json = @"{""choices"":[{""delta"":{""content"":""Hello""}}]}";
-//        var evt = new StreamEvent(null, json);
+    // ---------- Content Chunks ----------
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithValidContent_ReturnsChatChunk()
+    {
+        // Arrange
+        var parser = new OpenAIStreamChunkParser(_options);
+        var json = @"{""choices"":[{""delta"":{""content"":""Hello""}}]}";
+        var evt = new StreamEvent(null, json);
 
-//        // Assert
-//        result.Should().NotBeNull();
-//        result.Content.Should().Be("Hello");
-//        result.IsComplete.Should().BeFalse();
-//    }
+        // Act
+        var result = parser.Parse(evt);
 
-//    [Fact]
-//    public void Parse_WhenDataHasDeltaContentWithSpecialCharacters_ReturnsCorrectText()
-//    {
-//        // Arrange
-//        var parser = new OpenAIStreamChunkParser(_options);
-//        var json = @"{""choices"":[{""delta"":{""content"":""Hello\nworld""}}]}";
-//        var evt = new StreamEvent(null, json);
+        // Assert
+        result.Should().NotBeNull();
+        result.Content.Should().Be("Hello");
+        result.IsComplete.Should().BeFalse();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithContentAndSpecialCharacters_ReturnsCorrectText()
+    {
+        // Arrange
+        var parser = new OpenAIStreamChunkParser(_options);
+        var json = @"{""choices"":[{""delta"":{""content"":""Hello\nworld""}}]}";
+        var evt = new StreamEvent(null, json);
 
-//        // Assert
-//        result.Should().NotBeNull();
-//        result.Content.Should().Be("Hello\nworld");
-//    }
+        // Act
+        var result = parser.Parse(evt);
 
-//    [Fact]
-//    public void Parse_WhenDataHasMultipleChoices_UsesFirst()
-//    {
-//        // Arrange
-//        var parser = new OpenAIStreamChunkParser(_options);
-//        var json = @"{""choices"":[{""delta"":{""content"":""Hello""}},{""delta"":{""content"":""World""}}]}";
-//        var evt = new StreamEvent(null, json);
+        // Assert
+        result.Should().NotBeNull();
+        result.Content.Should().Be("Hello\nworld");
+    }
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithMultipleChoices_UsesFirst()
+    {
+        // Arrange
+        var parser = new OpenAIStreamChunkParser(_options);
+        var json = @"{""choices"":[{""delta"":{""content"":""Hello""}},{""delta"":{""content"":""World""}}]}";
+        var evt = new StreamEvent(null, json);
 
-//        // Assert
-//        result.Should().NotBeNull();
-//        result.Content.Should().Be("Hello");
-//    }
+        // Act
+        var result = parser.Parse(evt);
 
-//    [Fact]
-//    public void Parse_WhenDataIsDoneSentinel_ReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new OpenAIStreamChunkParser(_options);
-//        var evt = new StreamEvent(null, "[DONE]");
+        // Assert
+        result.Should().NotBeNull();
+        result.Content.Should().Be("Hello");
+    }
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithExtraFields_IgnoresThem()
+    {
+        // Arrange
+        var parser = new OpenAIStreamChunkParser(_options);
+        var json = @"{""extra"":""value"",""choices"":[{""delta"":{""content"":""Hello""}}]}";
+        var evt = new StreamEvent(null, json);
 
-//        // Assert
-//        result.Should().BeNull();
-//        // No log should be written
-//        _loggerMock.VerifyNoOtherCalls();
-//    }
+        // Act
+        var result = parser.Parse(evt);
 
-//    [Fact]
-//    public void Parse_WhenDataIsNullOrEmpty_ReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new OpenAIStreamChunkParser(_options);
+        // Assert
+        result.Should().NotBeNull();
+        result.Content.Should().Be("Hello");
+    }
 
-//        // Act
-//        var result1 = parser.Parse(new StreamEvent(null, null!));
-//        var result2 = parser.Parse(new StreamEvent(null, ""));
+    // ---------- Empty Content ----------
 
-//        // Assert
-//        result1.Should().BeNull();
-//        result2.Should().BeNull();
+    [Fact]
+    public void Parse_WithEmptyContent_ReturnsNull()
+    {
+        // Arrange
+        var parser = new OpenAIStreamChunkParser(_options);
+        var json = @"{""choices"":[{""delta"":{""content"":""""}}]}";
+        var evt = new StreamEvent(null, json);
 
-//        // No log should be written
-//        _loggerMock.VerifyNoOtherCalls();
-//    }
+        // Act
+        var result = parser.Parse(evt);
 
-//    [Fact]
-//    public void Parse_WhenDataIsMalformedJson_LogsErrorAndReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new OpenAIStreamChunkParser(_options);
-//        var malformedJson = "{choices:[{delta:{content:Hello}}]}"; // Invalid JSON
-//        var evt = new StreamEvent(null, malformedJson);
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithNullContent_ReturnsNull()
+    {
+        // Arrange
+        var parser = new OpenAIStreamChunkParser(_options);
+        var json = @"{""choices"":[{""delta"":{""content"":null}}]}";
+        var evt = new StreamEvent(null, json);
 
-//        // Assert
-//        result.Should().BeNull();
+        // Act
+        var result = parser.Parse(evt);
 
-//        // Verify logger was called with LogLevel.Information
-//        _loggerMock.Verify(
-//            x => x.Log(
-//                LogLevel.Information,
-//                It.IsAny<EventId>(),
-//                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Ignoring malformed chunks")),
-//                It.IsAny<Exception>(),
-//                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-//            Times.Once);
-//    }
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//    [Fact]
-//    public void Parse_WhenDataHasNoChoices_ReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new OpenAIStreamChunkParser(_options);
-//        var json = @"{}";
-//        var evt = new StreamEvent(null, json);
+    // ---------- Missing Fields ----------
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithNoChoices_ReturnsNull()
+    {
+        // Arrange
+        var parser = new OpenAIStreamChunkParser(_options);
+        var json = @"{}";
+        var evt = new StreamEvent(null, json);
 
-//        // Assert
-//        result.Should().BeNull();
-//    }
+        // Act
+        var result = parser.Parse(evt);
 
-//    [Fact]
-//    public void Parse_WhenDataHasChoicesButNoDelta_ReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new OpenAIStreamChunkParser(_options);
-//        var json = @"{""choices"":[{""finish_reason"":""stop""}]}";
-//        var evt = new StreamEvent(null, json);
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithChoicesButNoDelta_ReturnsNull()
+    {
+        // Arrange
+        var parser = new OpenAIStreamChunkParser(_options);
+        var json = @"{""choices"":[{""finish_reason"":""stop""}]}";
+        var evt = new StreamEvent(null, json);
 
-//        // Assert
-//        result.Should().BeNull();
-//    }
+        // Act
+        var result = parser.Parse(evt);
 
-//    [Fact]
-//    public void Parse_WhenDataHasDeltaButContentIsNull_ReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new OpenAIStreamChunkParser(_options);
-//        var json = @"{""choices"":[{""delta"":{""content"":null}}]}";
-//        var evt = new StreamEvent(null, json);
+        // Assert
+        result.Should().BeNull();
+    }
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithDeltaButNoContent_ReturnsNull()
+    {
+        // Arrange
+        var parser = new OpenAIStreamChunkParser(_options);
+        var json = @"{""choices"":[{""delta"":{}}]}";
+        var evt = new StreamEvent(null, json);
 
-//        // Assert
-//        result.Should().BeNull();
-//    }
+        // Act
+        var result = parser.Parse(evt);
 
-//    [Fact]
-//    public void Parse_WhenDataHasDeltaButContentIsEmpty_ReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new OpenAIStreamChunkParser(_options);
-//        var json = @"{""choices"":[{""delta"":{""content"":""""}}]}";
-//        var evt = new StreamEvent(null, json);
+        // Assert
+        result.Should().BeNull();
+    }
 
-//        // Act
-//        var result = parser.Parse(evt);
+    // ---------- Done Sentinel ----------
 
-//        // Assert
-//        result.Should().BeNull();
-//    }
+    [Fact]
+    public void Parse_WithDoneSentinel_ReturnsNull()
+    {
+        // Arrange
+        var parser = new OpenAIStreamChunkParser(_options);
+        var evt = new StreamEvent(null, "[DONE]");
 
-//    [Fact]
-//    public void Parse_WhenDataHasExtraFields_IgnoresThem()
-//    {
-//        // Arrange
-//        var parser = new OpenAIStreamChunkParser(_options);
-//        var json = @"{""extra"":""value"",""choices"":[{""delta"":{""content"":""Hello""}}]}";
-//        var evt = new StreamEvent(null, json);
+        // Act
+        var result = parser.Parse(evt);
 
-//        // Act
-//        var result = parser.Parse(evt);
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Assert
-//        result.Should().NotBeNull();
-//        result.Content.Should().Be("Hello");
-//    }
-//}
+    // ---------- Empty or Null Data ----------
+
+    [Fact]
+    public void Parse_WithNullData_ReturnsNull()
+    {
+        // Arrange
+        var parser = new OpenAIStreamChunkParser(_options);
+        var evt = new StreamEvent(null, null!);
+
+        // Act
+        var result = parser.Parse(evt);
+
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public void Parse_WithEmptyData_ReturnsNull()
+    {
+        // Arrange
+        var parser = new OpenAIStreamChunkParser(_options);
+        var evt = new StreamEvent(null, "");
+
+        // Act
+        var result = parser.Parse(evt);
+
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.VerifyNoOtherCalls();
+    }
+
+    // ---------- Malformed JSON ----------
+
+    [Fact]
+    public void Parse_WithMalformedJson_LogsAndReturnsNull()
+    {
+        // Arrange
+        var parser = new OpenAIStreamChunkParser(_options);
+        var malformedJson = "{choices:[{delta:{content:Hello}}]}";
+        var evt = new StreamEvent(null, malformedJson);
+
+        // Act
+        var result = parser.Parse(evt);
+
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.Verify(
+            x => x.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Ignoring malformed chunks")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+}

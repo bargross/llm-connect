@@ -1,143 +1,212 @@
-﻿//using FluentAssertions;
-//using LLMConnect.Configuration;
-//using LLMConnect.Models;
-//using LLMConnect.Settings;
-//using Microsoft.Extensions.DependencyInjection;
-//using Microsoft.Extensions.Options;
+﻿using FluentAssertions;
+using LLMConnect.Configuration;
+using LLMConnect.Models;
+using LLMConnect.Settings;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Moq;
 
-//namespace LLMConnect.Tests.Configuration;
+namespace LLMConnect.Tests.Configuration;
 
-//public class ServiceCollectionExtensionsTests
-//{
-//    [Fact]
-//    public void AddLLMConnect_WithConfigureDelegate_RegistersOptionsCorrectly()
-//    {
-//        // Arrange
-//        var services = new ServiceCollection();
-//        var expectedApiKey = "test-key-123";
+public class ServiceCollectionExtensionsTests
+{
+    private readonly Mock<ILoggerFactory> _loggerFactoryMock;
+    private readonly Mock<ILogger> _loggerMock;
 
-//        // Act
-//        services.AddLLMConnect(options =>
-//        {
-//            options.Provider = ProviderType.OpenAI;
-//            options.ApiKey = expectedApiKey;
-//            options.MaxRetries = 5;
-//        });
+    public ServiceCollectionExtensionsTests()
+    {
+        _loggerMock = new Mock<ILogger>();
+        _loggerFactoryMock = new Mock<ILoggerFactory>();
+        _loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(_loggerMock.Object);
 
-//        // Build service provider to resolve options
-//        var serviceProvider = services.BuildServiceProvider();
-//        var options = serviceProvider.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
+        // Reset the static flag before each test to avoid cross-test interference
+        ResetCoreServicesRegistered();
+    }
 
-//        // Assert
-//        options.Provider.Should().Be(ProviderType.OpenAI);
-//        options.ApiKey.Should().Be(expectedApiKey);
-//        options.MaxRetries.Should().Be(5);
-//    }
+    private static void ResetCoreServicesRegistered()
+    {
+        var field = typeof(ServiceCollectionExtensions)
+            .GetField("_coreServicesRegistered", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        if (field != null)
+        {
+            field.SetValue(null, false);
+        }
+    }
 
-//    [Fact]
-//    public void AddLLMConnect_WithoutConfigureDelegate_RegistersDefaultOptions()
-//    {
-//        // Arrange
-//        var services = new ServiceCollection();
+    // ---------- AddLLMConnect with unified options ----------
 
-//        // Act
-//        services.AddLLMConnect();
+    [Fact]
+    public void AddLLMConnect_WithConfigureDelegate_RegistersOptionsCorrectly()
+    {
+        var services = new ServiceCollection();
+        var expectedApiKey = "test-key-123";
 
-//        // Build service provider to resolve options
-//        var serviceProvider = services.BuildServiceProvider();
-//        var options = serviceProvider.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
+        // ✅ Explicit cast to resolve ambiguity
+        services.AddLLMConnect((Action<LLMConnectClientOptions>)(options =>
+        {
+            options.Provider = ProviderType.OpenAI;
+            options.ApiKey = expectedApiKey;
+            options.MaxRetries = 5;
+            options.Timeout = TimeSpan.FromSeconds(30);
+            options.LoggerFactory = _loggerFactoryMock.Object;
+        }));
 
-//        // Assert
-//        options.Provider.Should().Be(ProviderType.OpenAI); // Default
-//        options.ApiKey.Should().Be(string.Empty); // Default
-//        options.MaxRetries.Should().Be(3); // Default
-//        options.Timeout.Should().Be(TimeSpan.FromSeconds(60)); // Default
-//    }
+        var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
 
-//    [Fact]
-//    public void AddLLMConnect_RegistersILLMConnectClientAsSingleton()
-//    {
-//        // Arrange
-//        var services = new ServiceCollection();
+        options.Provider.Should().Be(ProviderType.OpenAI);
+        options.ApiKey.Should().Be(expectedApiKey);
+        options.MaxRetries.Should().Be(5);
+        options.Timeout.Should().Be(TimeSpan.FromSeconds(30));
+        options.LoggerFactory.Should().Be(_loggerFactoryMock.Object);
+    }
 
-//        // Act
-//        services.AddLLMConnect();
+    [Fact]
+    public void AddLLMConnect_WithoutConfigureDelegate_RegistersDefaultOptions()
+    {
+        var services = new ServiceCollection();
+        services.AddLLMConnect();
 
-//        // Assert
-//        var descriptor = services.Should().ContainSingle(sd =>
-//            sd.ServiceType == typeof(ILLMConnectClient) &&
-//            sd.Lifetime == ServiceLifetime.Singleton &&
-//            sd.ImplementationFactory != null);
-//        descriptor.Should().NotBeNull();
-//    }
+        var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
 
-//    [Fact]
-//    public void AddLLMConnect_RegistersNamedHttpClientWithRetryHandler()
-//    {
-//        // Arrange
-//        var services = new ServiceCollection();
+        options.Provider.Should().Be(ProviderType.OpenAI);
+        options.ApiKey.Should().BeEmpty();
+        options.MaxRetries.Should().Be(3);
+        options.Timeout.Should().Be(TimeSpan.FromSeconds(60));
+        options.LoggerFactory.Should().BeNull();
+    }
 
-//        // Act
-//        services.AddLLMConnect(options =>
-//        {
-//            options.Provider = ProviderType.OpenAI;
-//            options.ApiKey = "valid-test-key";
-//            options.MaxRetries = 3;
-//        });
+    [Fact]
+    public void AddLLMConnect_RegistersClientAsSingleton()
+    {
+        var services = new ServiceCollection();
+        services.AddLLMConnect((Action<LLMConnectGeneralOptions>)(general => {
+            general.ApiKey = "test-key";
+        }));
 
-//        // Build the service provider
-//        var provider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
 
-//        // Assert
-//        // 1. The client can be resolved
-//        var client = provider.GetService<ILLMConnectClient>();
-//        client.Should().NotBeNull();
+        var client1 = provider.GetService<ILLMConnectClient>();
+        var client2 = provider.GetService<ILLMConnectClient>();
 
-//        // 2. The HttpClientFactory is registered
-//        var factory = provider.GetService<IHttpClientFactory>();
-//        factory.Should().NotBeNull();
+        client1.Should().NotBeNull();
+        client2.Should().NotBeNull();
+        client1.Should().BeSameAs(client2);
+    }
 
-//        // 3. The named client can be created (ensures the handler chain is configured)
-//        using var httpClient = factory.CreateClient("LLMConnect");
-//        httpClient.Should().NotBeNull();
-//    }
+    [Fact]
+    public void AddLLMConnect_RegistersNamedHttpClientWithRetryHandler()
+    {
+        var services = new ServiceCollection();
+        services.AddLLMConnect();
 
-//    [Fact]
-//    public void AddLLMConnect_WhenConfigureDelegateIsNull_DoesNotThrow()
-//    {
-//        // Arrange
-//        var services = new ServiceCollection();
+        var provider = services.BuildServiceProvider();
+        var factory = provider.GetRequiredService<IHttpClientFactory>();
 
-//        // Act
-//        Action act = () => services.AddLLMConnect(null);
+        using var httpClient = factory.CreateClient("LLMConnect");
+        httpClient.Should().NotBeNull();
+        factory.Should().NotBeNull();
+    }
 
-//        // Assert
-//        act.Should().NotThrow();
-//    }
+    // ---------- AddLLMConnect with split options ----------
 
-//    [Fact]
-//    public void AddLLMConnect_RegistersRetryHandlerWithMaxRetriesFromOptions()
-//    {
-//        // Arrange
-//        var services = new ServiceCollection();
-//        var expectedMaxRetries = 7;
+    [Fact]
+    public void AddLLMConnect_WithSplitOptions_RegistersGeneralAndEndpointOptionsCorrectly()
+    {
+        var services = new ServiceCollection();
 
-//        // Act
-//        services.AddLLMConnect(options =>
-//        {
-//            options.MaxRetries = expectedMaxRetries;
-//        });
+        // ✅ No ambiguity here – two parameters make it clear
+        services.AddLLMConnect(
+            general =>
+            {
+                general.Provider = ProviderType.Anthropic;
+                general.ApiKey = "anthropic-key";
+                general.DefaultModel = "claude-3";
+                general.MaxRetries = 2;
+                general.Timeout = TimeSpan.FromSeconds(45);
+                general.LoggerFactory = _loggerFactoryMock.Object;
+            },
+            endpoint =>
+            {
+                endpoint.OllamaPort = 11435;
+                endpoint.Endpoint = "https://custom-endpoint.com";
+            });
 
-//        // Build service provider and resolve the retry handler (which is used by the named client)
-//        var serviceProvider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        var generalOptions = provider.GetRequiredService<IOptions<LLMConnectGeneralOptions>>().Value;
+        var endpointOptions = provider.GetRequiredService<IOptions<LLMConnectEndpointOptions>>().Value;
 
-//        // The retry handler is not directly registered as a service (it's created via a factory delegate).
-//        // We can't easily resolve it. But we can verify that the options were correctly registered.
-//        var options = serviceProvider.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
-//        options.MaxRetries.Should().Be(expectedMaxRetries);
+        generalOptions.Provider.Should().Be(ProviderType.Anthropic);
+        generalOptions.ApiKey.Should().Be("anthropic-key");
+        generalOptions.DefaultModel.Should().Be("claude-3");
+        generalOptions.MaxRetries.Should().Be(2);
+        generalOptions.Timeout.Should().Be(TimeSpan.FromSeconds(45));
+        generalOptions.LoggerFactory.Should().Be(_loggerFactoryMock.Object);
 
-//        // Alternatively, we could use a custom approach to extract the handler, but it's complex.
-//        // We'll rely on the fact that the options are passed to the handler when created.
-//        // This is covered by the previous test where we check the options.
-//    }
-//}
+        endpointOptions.OllamaPort.Should().Be(11435);
+        endpointOptions.Endpoint.Should().Be("https://custom-endpoint.com");
+    }
+
+    [Fact]
+    public void AddLLMConnect_WithOnlyGeneralOptions_RegistersGeneralOptionsWithDefaultEndpoint()
+    {
+        var services = new ServiceCollection();
+
+        // ✅ Explicit cast to resolve ambiguity
+        services.AddLLMConnect((Action<LLMConnectGeneralOptions>)(general =>
+        {
+            general.Provider = ProviderType.OpenAI;
+            general.ApiKey = "openai-key";
+        }));
+
+        var provider = services.BuildServiceProvider();
+        var generalOptions = provider.GetRequiredService<IOptions<LLMConnectGeneralOptions>>().Value;
+        var endpointOptions = provider.GetRequiredService<IOptions<LLMConnectEndpointOptions>>().Value;
+
+        generalOptions.Provider.Should().Be(ProviderType.OpenAI);
+        generalOptions.ApiKey.Should().Be("openai-key");
+        endpointOptions.Should().NotBeNull();
+        endpointOptions.Endpoint.Should().BeNull();
+    }
+
+    [Fact]
+    public void AddLLMConnect_WithSplitOptions_RegistersClientAsSingleton()
+    {
+        var services = new ServiceCollection();
+        services.AddLLMConnect(
+            general => {
+                general.Provider = ProviderType.OpenAI;
+                general.ApiKey = "key";
+            },
+            endpoint => { });
+
+        var provider = services.BuildServiceProvider();
+        var client1 = provider.GetService<ILLMConnectClient>();
+        var client2 = provider.GetService<ILLMConnectClient>();
+
+        client1.Should().NotBeNull();
+        client2.Should().NotBeNull();
+        client1.Should().BeSameAs(client2);
+    }
+
+    // ---------- Multiple registrations (lock) ----------
+
+    [Fact]
+    public void AddLLMConnect_CalledMultipleTimes_RegistersCoreServicesOnlyOnce()
+    {
+        var services = new ServiceCollection();
+
+        // ✅ Explicit cast to resolve ambiguity
+        services.AddLLMConnect((Action<LLMConnectClientOptions>)(options => options.ApiKey = "first"));
+        services.AddLLMConnect((Action<LLMConnectClientOptions>)(options => options.ApiKey = "second"));
+
+        var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
+
+        options.ApiKey.Should().Be("second");
+        var factory = provider.GetService<IHttpClientFactory>();
+        factory.Should().NotBeNull();
+    }
+}

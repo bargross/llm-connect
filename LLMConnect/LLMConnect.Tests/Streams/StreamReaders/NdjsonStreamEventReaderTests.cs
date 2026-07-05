@@ -1,216 +1,227 @@
-﻿//using FluentAssertions;
-//using LLMConnect.Settings;
-//using Microsoft.Extensions.Logging;
-//using Moq;
-//using System.Text;
+﻿using FluentAssertions;
+using LLMConnect.Settings;
+using Microsoft.Extensions.Logging;
+using Moq;
+using System.Text;
+using Xunit;
 
-//namespace LLMConnect.Tests.Streams.StreamReaders;
+namespace LLMConnect.Tests.Streams.StreamReaders;
 
-//public class NdjsonStreamEventReaderTests
-//{
-//    [Fact]
-//    public async Task ReadEventsAsync_WithDataPrefix_YieldsCorrectEvents()
-//    {
-//        // Arrange
-//        var ndjsonContent = """
-//        data: {"id":"1","content":"Hello"}
-//        data: {"id":"2","content":" world"}
-//        """;
+public class NdjsonStreamEventReaderTests
+{
+    private readonly Mock<ILogger<NdjsonStreamEventReader>> _loggerMock;
+    private readonly Mock<ILoggerFactory> _loggerFactoryMock;
+    private readonly LLMConnectGeneralOptions _options;
 
-//        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(ndjsonContent));
-//        var reader = new NdjsonStreamEventReader();
+    public NdjsonStreamEventReaderTests()
+    {
+        _loggerMock = new Mock<ILogger<NdjsonStreamEventReader>>();
+        _loggerFactoryMock = new Mock<ILoggerFactory>();
+        _loggerFactoryMock
+            .Setup(x => x.CreateLogger(It.IsAny<string>()))
+            .Returns(_loggerMock.Object);
 
-//        // Act
-//        var events = await reader.ReadEventsAsync(stream).ToListAsync();
+        _options = new LLMConnectGeneralOptions
+        {
+            LoggerFactory = _loggerFactoryMock.Object
+        };
+    }
 
-//        // Assert
-//        events.Should().HaveCount(2);
-//        events[0].EventName.Should().BeNull();
-//        events[0].Data.Should().Be(@"{""id"":""1"",""content"":""Hello""}");
-//        events[1].EventName.Should().BeNull();
-//        events[1].Data.Should().Be(@"{""id"":""2"",""content"":"" world""}");
-//    }
+    // Helper to create a stream from string
+    private static Stream CreateStream(string content)
+    {
+        return new MemoryStream(Encoding.UTF8.GetBytes(content));
+    }
 
-//    [Fact]
-//    public async Task ReadEventsAsync_WithRawJsonLines_YieldsCorrectEvents()
-//    {
-//        // Arrange
-//        var ndjsonData = """
-//        {"id":"1","content":"Hello"}
-//        {"id":"2","content":" world"}
-//        """;
+    // ---------- OpenAI-style "data: " prefix ----------
 
-//        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(ndjsonData));
-//        var reader = new NdjsonStreamEventReader();
+    [Fact]
+    public async Task ReadEventsAsync_WithDataPrefixLines_ReturnsEvents()
+    {
+        var content = """
+            data: {"id":"1","content":"Hello"}
+            data: {"id":"2","content":" world"}
+            """;
+        using var stream = CreateStream(content);
+        var reader = new NdjsonStreamEventReader(_options);
 
-//        // Act
-//        var events = await reader.ReadEventsAsync(stream).ToListAsync();
+        var events = await reader.ReadEventsAsync(stream).ToListAsync();
 
-//        // Assert
-//        events.Should().HaveCount(2);
-//        events[0].EventName.Should().BeNull();
-//        events[0].Data.Should().Be(@"{""id"":""1"",""content"":""Hello""}");
-//        events[1].EventName.Should().BeNull();
-//        events[1].Data.Should().Be(@"{""id"":""2"",""content"":"" world""}");
-//    }
+        events.Should().HaveCount(2);
+        events[0].EventName.Should().BeNull();
+        events[0].Data.Should().Be(@"{""id"":""1"",""content"":""Hello""}");
+        events[1].EventName.Should().BeNull();
+        events[1].Data.Should().Be(@"{""id"":""2"",""content"":"" world""}");
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//    [Fact]
-//    public async Task ReadEventsAsync_WithMixedDataPrefixAndRawLines_HandlesBoth()
-//    {
-//        // Arrange
-//        var ndjsonData = """
-//        data: {"type":"openai"}
-//        {"type":"ollama"}
-//        data: {"type":"openai2"}
-//        """;
+    // ---------- Ollama-style raw JSON lines ----------
 
-//        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(ndjsonData));
-//        var reader = new NdjsonStreamEventReader();
+    [Fact]
+    public async Task ReadEventsAsync_WithRawJsonLines_ReturnsEvents()
+    {
+        var content = """
+            {"id":"1","content":"Hello"}
+            {"id":"2","content":" world"}
+            """;
+        using var stream = CreateStream(content);
+        var reader = new NdjsonStreamEventReader(_options);
 
-//        // Act
-//        var events = await reader.ReadEventsAsync(stream).ToListAsync();
+        var events = await reader.ReadEventsAsync(stream).ToListAsync();
 
-//        // Assert
-//        events.Should().HaveCount(3);
-//        events[0].Data.Should().Be(@"{""type"":""openai""}");
-//        events[1].Data.Should().Be(@"{""type"":""ollama""}");
-//        events[2].Data.Should().Be(@"{""type"":""openai2""}");
-//    }
+        events.Should().HaveCount(2);
+        events[0].Data.Should().Be(@"{""id"":""1"",""content"":""Hello""}");
+        events[1].Data.Should().Be(@"{""id"":""2"",""content"":"" world""}");
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//    [Fact]
-//    public async Task ReadEventsAsync_WithDoneSentinel_YieldsBreak()
-//    {
-//        // Arrange
-//        var ndjsonContent = """
-//        data: {"id":"1"}
-//        data: [DONE]
-//        data: {"id":"2"}
-//        """;
+    // ---------- Mixed prefix and raw ----------
 
-//        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(ndjsonContent));
-//        var reader = new NdjsonStreamEventReader();
+    [Fact]
+    public async Task ReadEventsAsync_WithMixedPrefixAndRaw_ReturnsAllEvents()
+    {
+        var content = """
+            data: {"type":"openai"}
+            {"type":"ollama"}
+            data: {"type":"openai2"}
+            """;
+        using var stream = CreateStream(content);
+        var reader = new NdjsonStreamEventReader(_options);
 
-//        // Act
-//        var events = await reader.ReadEventsAsync(stream).ToListAsync();
+        var events = await reader.ReadEventsAsync(stream).ToListAsync();
 
-//        // Assert
-//        events.Should().HaveCount(2); // Only the first data and the sentinel event
-//        events[0].Data.Should().Be(@"{""id"":""1""}");
-//        events[1].Data.Should().Be("[DONE]");
-//        // The third line should not be read because the sentinel caused yield break
-//    }
-//    [Fact]
-//    public async Task ReadEventsAsync_WithEmptyLines_SkipsThem()
-//    {
-//        // Arrange
-//        var ndjsonData = """
-//        data: {"type":"openai"}
+        events.Should().HaveCount(3);
+        events[0].Data.Should().Be(@"{""type"":""openai""}");
+        events[1].Data.Should().Be(@"{""type"":""ollama""}");
+        events[2].Data.Should().Be(@"{""type"":""openai2""}");
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        {"type":"ollama"}
-//        """;
+    // ---------- Done sentinel ----------
 
-//        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(ndjsonData));
-//        var reader = new NdjsonStreamEventReader();
+    [Fact]
+    public async Task ReadEventsAsync_WithDoneSentinel_StopsAfterSentinel()
+    {
+        var content = """
+            data: {"id":"1"}
+            data: [DONE]
+            data: {"id":"2"}
+            """;
+        using var stream = CreateStream(content);
+        var reader = new NdjsonStreamEventReader(_options);
 
-//        // Act
-//        var events = await reader.ReadEventsAsync(stream).ToListAsync();
+        var events = await reader.ReadEventsAsync(stream).ToListAsync();
 
-//        // Assert
-//        events.Should().HaveCount(2);
-//        events[0].Data.Should().Be(@"{""type"":""openai""}");
-//        events[1].Data.Should().Be(@"{""type"":""ollama""}");
-//    }
+        events.Should().HaveCount(2);
+        events[0].Data.Should().Be(@"{""id"":""1""}");
+        events[1].Data.Should().Be("[DONE]");
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//    [Fact]
-//    public async Task ReadEventsAsync_WithCancellation_LogsAndBreaks()
-//    {
-//        // Arrange
-//        var loggerMock = new Mock<ILogger>();
-//        var loggerFactoryMock = new Mock<ILoggerFactory>();
-//        loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>()))
-//            .Returns(loggerMock.Object);
+    // ---------- Empty lines ----------
 
-//        var options = new LLMConnectClientOptions
-//        {
-//            LoggerFactory = loggerFactoryMock.Object
-//        };
-//        var reader = new NdjsonStreamEventReader(options);
+    [Fact]
+    public async Task ReadEventsAsync_WithEmptyLines_SkipsThem()
+    {
+        var content = """
 
-//        var ndjsonData = @"
-//            data: hello
-//        ".Trim();
+            data: {"id":"1"}
 
-//        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(ndjsonData));
+            {"id":"2"}
 
-//        using var cts = new CancellationTokenSource();
-//        cts.Cancel();
+            """.TrimStart(); // Keep leading newline
+        using var stream = CreateStream(content);
+        var reader = new NdjsonStreamEventReader(_options);
 
-//        // Act
-//        var enumerator = reader.ReadEventsAsync(stream, cts.Token).GetAsyncEnumerator();
-//        var result = await enumerator.MoveNextAsync();
+        var events = await reader.ReadEventsAsync(stream).ToListAsync();
 
-//        // Assert
-//        result.Should().BeFalse();
+        events.Should().HaveCount(2);
+        events[0].Data.Should().Be(@"{""id"":""1""}");
+        events[1].Data.Should().Be(@"{""id"":""2""}");
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        loggerMock.Verify(x => x.Log(
-//            LogLevel.Error,
-//            It.IsAny<EventId>(),
-//            It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("OpenAI stream has ended.")),
-//            It.IsAny<Exception>(),
-//            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-//            Times.Once);
-//    }
+    // ---------- Cancellation ----------
 
-//    [Fact]
-//    public async Task ReadEventsAsync_WithNoData_ReturnsEmpty()
-//    {
-//        // Arrange
-//        var ndjsonData = "";
-//        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(ndjsonData));
-//        var reader = new NdjsonStreamEventReader();
+    [Fact]
+    public async Task ReadEventsAsync_WithCancellation_LogsAndBreaks()
+    {
+        var content = """
+            data: {"id":"1"}
+            data: {"id":"2"}
+            """;
+        using var stream = CreateStream(content);
+        using var cts = new CancellationTokenSource();
+        var reader = new NdjsonStreamEventReader(_options);
 
-//        // Act
-//        var events = await reader.ReadEventsAsync(stream).ToListAsync();
+        // Cancel after first event
+        var enumerator = reader.ReadEventsAsync(stream, cts.Token).GetAsyncEnumerator();
+        var hasNext = await enumerator.MoveNextAsync();
+        hasNext.Should().BeTrue();
+        enumerator.Current.Data.Should().Be(@"{""id"":""1""}");
 
-//        // Assert
-//        events.Should().BeEmpty();
-//    }
+        // Cancel and try to get next
+        cts.Cancel();
+        var nextHasNext = await enumerator.MoveNextAsync();
+        nextHasNext.Should().BeFalse();
 
-//    [Fact]
-//    public async Task ReadEventsAsync_WithLogger_LogsOnCancellation()
-//    {
-//        // Arrange
-//        var loggerMock = new Mock<ILogger>();
-//        var loggerFactoryMock = new Mock<ILoggerFactory>();
-//        loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>()))
-//            .Returns(loggerMock.Object);
+        _loggerMock.Verify(
+            x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("OpenAI stream has ended.")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
 
-//        var options = new LLMConnectClientOptions
-//        {
-//            LoggerFactory = loggerFactoryMock.Object
-//        };
-//        var reader = new NdjsonStreamEventReader(options);
+    // ---------- No data ----------
 
-//        var ndjsonData = @"
-//            data: hello
-//        ".Trim();
-        
-//        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(ndjsonData));
+    [Fact]
+    public async Task ReadEventsAsync_WithNoData_ReturnsEmpty()
+    {
+        using var stream = new MemoryStream();
+        var reader = new NdjsonStreamEventReader(_options);
 
-//        using var cts = new CancellationTokenSource();
-//        cts.Cancel();
+        var events = await reader.ReadEventsAsync(stream).ToListAsync();
 
-//        // Act
-//        var enumerator = reader.ReadEventsAsync(stream, cts.Token).GetAsyncEnumerator();
-//        await enumerator.MoveNextAsync();
+        events.Should().BeEmpty();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Assert
-//        loggerMock.Verify(x => x.Log(
-//            LogLevel.Error,
-//            It.IsAny<EventId>(),
-//            It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("OpenAI stream has ended.")),
-//            It.IsAny<Exception>(),
-//            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-//            Times.Once);
-//    }
-//}
+    // ---------- Logger null ----------
+
+    [Fact]
+    public async Task ReadEventsAsync_WhenLoggerIsNull_DoesNotThrow()
+    {
+        var optionsWithoutLogger = new LLMConnectGeneralOptions { LoggerFactory = null };
+        var content = "data: {\"test\":\"value\"}";
+        using var stream = CreateStream(content);
+        var reader = new NdjsonStreamEventReader(optionsWithoutLogger);
+
+        var act = async () => await reader.ReadEventsAsync(stream).ToListAsync();
+
+        await act.Should().NotThrowAsync();
+    }
+
+    // ---------- Cancellation without logger ----------
+
+    [Fact]
+    public async Task ReadEventsAsync_WithCancellationAndNoLogger_DoesNotThrow()
+    {
+        var optionsWithoutLogger = new LLMConnectGeneralOptions { LoggerFactory = null };
+        var content = "data: {\"test\":\"value\"}";
+        using var stream = CreateStream(content);
+        using var cts = new CancellationTokenSource();
+        var reader = new NdjsonStreamEventReader(optionsWithoutLogger);
+
+        cts.Cancel();
+        var act = async () =>
+        {
+            var enumerator = reader.ReadEventsAsync(stream, cts.Token).GetAsyncEnumerator();
+            await enumerator.MoveNextAsync();
+        };
+
+        await act.Should().NotThrowAsync();
+    }
+}

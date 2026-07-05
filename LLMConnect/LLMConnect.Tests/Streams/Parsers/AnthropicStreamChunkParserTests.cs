@@ -1,196 +1,208 @@
-﻿//using FluentAssertions;
-//using LLMConnect.Settings;
-//using Microsoft.Extensions.Logging;
-//using Moq;
-//using System.Text.Json;
-//using Xunit;
+﻿using FluentAssertions;
+using LLMConnect.Settings;
+using Microsoft.Extensions.Logging;
+using Moq;
+using System.Text.Json;
+using Xunit;
 
-//namespace LLMConnect.Tests.Streams.ChunkParsers;
+namespace LLMConnect.Tests.Streams.ChunkParsers;
 
-//public class AnthropicStreamChunkParserTests
-//{
-//    private readonly Mock<ILogger> _loggerMock;
-//    private readonly LLMConnectClientOptions _options;
+public class AnthropicStreamChunkParserTests
+{
+    private readonly Mock<ILogger<AnthropicStreamChunkParser>> _loggerMock;
+    private readonly Mock<ILoggerFactory> _loggerFactoryMock;
+    private readonly LLMConnectGeneralOptions _options;
 
-//    public AnthropicStreamChunkParserTests()
-//    {
-//        _loggerMock = new Mock<ILogger>();
-//        var loggerFactoryMock = new Mock<ILoggerFactory>();
-//        loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>()))
-//            .Returns(_loggerMock.Object);
+    public AnthropicStreamChunkParserTests()
+    {
+        _loggerMock = new Mock<ILogger<AnthropicStreamChunkParser>>();
+        _loggerFactoryMock = new Mock<ILoggerFactory>();
+        _loggerFactoryMock
+            .Setup(x => x.CreateLogger(It.IsAny<string>()))
+            .Returns(_loggerMock.Object);
 
-//        _options = new LLMConnectClientOptions
-//        {
-//            LoggerFactory = loggerFactoryMock.Object
-//        };
-//    }
+        _options = new LLMConnectGeneralOptions
+        {
+            LoggerFactory = _loggerFactoryMock.Object
+        };
+    }
 
-//    [Fact]
-//    public void Parse_WhenEventNameIsContentBlockDeltaAndDataIsValid_ReturnsChatChunk()
-//    {
-//        // Arrange
-//        var parser = new AnthropicStreamChunkParser(_options);
-//        var json = @"{""delta"":{""text"":""Hello""}}";
-//        var evt = new StreamEvent("content_block_delta", json);
+    // ---------- Valid Events ----------
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithValidContentBlockDelta_ReturnsChatChunk()
+    {
+        // Arrange
+        var parser = new AnthropicStreamChunkParser(_options);
+        var json = @"{""delta"":{""text"":""Hello""}}";
+        var evt = new StreamEvent("content_block_delta", json);
 
-//        // Assert
-//        result.Should().NotBeNull();
-//        result.Content.Should().Be("Hello");
-//        result.IsComplete.Should().BeFalse();
-//    }
+        // Act
+        var result = parser.Parse(evt);
 
-//    [Fact]
-//    public void Parse_WhenDataContainsSpecialCharacters_ReturnsCorrectText()
-//    {
-//        // Arrange
-//        var parser = new AnthropicStreamChunkParser(_options);
-//        var json = @"{""delta"":{""text"":""Hello\nworld""}}";
-//        var evt = new StreamEvent("content_block_delta", json);
+        // Assert
+        result.Should().NotBeNull();
+        result.Content.Should().Be("Hello");
+        result.IsComplete.Should().BeFalse();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithValidContentBlockDeltaAndSpecialCharacters_ReturnsCorrectText()
+    {
+        // Arrange
+        var parser = new AnthropicStreamChunkParser(_options);
+        var json = @"{""delta"":{""text"":""Hello\nworld""}}";
+        var evt = new StreamEvent("content_block_delta", json);
 
-//        // Assert
-//        result.Should().NotBeNull();
-//        result.Content.Should().Be("Hello\nworld");
-//    }
+        // Act
+        var result = parser.Parse(evt);
 
-//    [Fact]
-//    public void Parse_WhenEventNameIsNotContentBlockDelta_ReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new AnthropicStreamChunkParser(_options);
-//        var json = @"{""delta"":{""text"":""Hello""}}";
-//        var evt = new StreamEvent("message_stop", json);
+        // Assert
+        result.Should().NotBeNull();
+        result.Content.Should().Be("Hello\nworld");
+    }
 
-//        // Act
-//        var result = parser.Parse(evt);
+    // ---------- Invalid Event Names ----------
 
-//        // Assert
-//        result.Should().BeNull();
-//        // Logger should not be called (no error)
-//        _loggerMock.VerifyNoOtherCalls();
-//    }
+    [Fact]
+    public void Parse_WithNonContentBlockDeltaEvent_ReturnsNull()
+    {
+        // Arrange
+        var parser = new AnthropicStreamChunkParser(_options);
+        var json = @"{""delta"":{""text"":""Hello""}}";
+        var evt = new StreamEvent("message_stop", json);
 
-//    [Fact]
-//    public void Parse_WhenDataIsNullOrEmpty_ReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new AnthropicStreamChunkParser(_options);
+        // Act
+        var result = parser.Parse(evt);
 
-//        // Act
-//        var result1 = parser.Parse(new StreamEvent("content_block_delta", null!));
-//        var result2 = parser.Parse(new StreamEvent("content_block_delta", ""));
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Assert
-//        result1.Should().BeNull();
-//        result2.Should().BeNull();
-//        // Logger should not be called for empty data
-//        _loggerMock.VerifyNoOtherCalls();
-//    }
+    // ---------- Empty or Null Data ----------
 
-//    [Fact]
-//    public void Parse_WhenDataIsDoneSentinel_ReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new AnthropicStreamChunkParser(_options);
-//        var evt = new StreamEvent("content_block_delta", "[DONE]");
+    [Fact]
+    public void Parse_WithNullData_ReturnsNull()
+    {
+        // Arrange
+        var parser = new AnthropicStreamChunkParser(_options);
+        var evt = new StreamEvent("content_block_delta", null!);
 
-//        // Act
-//        var result = parser.Parse(evt);
+        // Act
+        var result = parser.Parse(evt);
 
-//        // Assert
-//        result.Should().BeNull();
-//    }
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//    [Fact]
-//    public void Parse_WhenDataIsMalformedJson_LogsErrorAndReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new AnthropicStreamChunkParser(_options);
-//        var malformedJson = "{delta:{text:Hello}}"; // Invalid JSON (missing quotes)
-//        var evt = new StreamEvent("content_block_delta", malformedJson);
+    [Fact]
+    public void Parse_WithEmptyData_ReturnsNull()
+    {
+        // Arrange
+        var parser = new AnthropicStreamChunkParser(_options);
+        var evt = new StreamEvent("content_block_delta", "");
 
-//        // Act
-//        var result = parser.Parse(evt);
+        // Act
+        var result = parser.Parse(evt);
 
-//        // Assert
-//        result.Should().BeNull();
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Verify logger was called with LogLevel.Information
-//        _loggerMock.Verify(
-//            x => x.Log(
-//                LogLevel.Information,
-//                It.IsAny<EventId>(),
-//                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Ignoring malformed chunks")),
-//                It.IsAny<Exception>(),
-//                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-//            Times.Once);
-//    }
+    [Fact]
+    public void Parse_WithDoneSentinel_ReturnsNull()
+    {
+        // Arrange
+        var parser = new AnthropicStreamChunkParser(_options);
+        var evt = new StreamEvent("content_block_delta", "[DONE]");
 
-//    [Fact]
-//    public void Parse_WhenJsonIsValidButDeltaTextIsNull_ReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new AnthropicStreamChunkParser(_options);
-//        var json = @"{""delta"":{""text"":null}}";
-//        var evt = new StreamEvent("content_block_delta", json);
+        // Act
+        var result = parser.Parse(evt);
 
-//        // Act
-//        var result = parser.Parse(evt);
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Assert
-//        result.Should().BeNull();
-//        // No log on success
-//        _loggerMock.VerifyNoOtherCalls();
-//    }
+    // ---------- Malformed JSON ----------
 
-//    [Fact]
-//    public void Parse_WhenJsonIsValidButDeltaTextIsEmpty_ReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new AnthropicStreamChunkParser(_options);
-//        var json = @"{""delta"":{""text"":""""}}";
-//        var evt = new StreamEvent("content_block_delta", json);
+    [Fact]
+    public void Parse_WithMalformedJson_LogsAndReturnsNull()
+    {
+        // Arrange
+        var parser = new AnthropicStreamChunkParser(_options);
+        var malformedJson = "{delta:{text:Hello}}"; // Missing quotes
+        var evt = new StreamEvent("content_block_delta", malformedJson);
 
-//        // Act
-//        var result = parser.Parse(evt);
+        // Act
+        var result = parser.Parse(evt);
 
-//        // Assert
-//        result.Should().BeNull();
-//    }
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.Verify(
+            x => x.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Ignoring malformed chunks")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
 
-//    [Fact]
-//    public void Parse_WhenDataIsValidButNotAnthropicFormat_ReturnsNull()
-//    {
-//        // Arrange
-//        var parser = new AnthropicStreamChunkParser(_options);
-//        var json = @"{""choices"":[{""delta"":{""content"":""Hello""}}]}"; // OpenAI format
-//        var evt = new StreamEvent("content_block_delta", json);
+    // ---------- Valid JSON but Empty Text ----------
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithValidJsonButEmptyText_ReturnsNull()
+    {
+        // Arrange
+        var parser = new AnthropicStreamChunkParser(_options);
+        var json = @"{""delta"":{""text"":""""}}";
+        var evt = new StreamEvent("content_block_delta", json);
 
-//        // Assert
-//        result.Should().BeNull();
-//    }
+        // Act
+        var result = parser.Parse(evt);
 
-//    [Fact]
-//    public void Parse_WhenDataHasExtraFields_IgnoresThem()
-//    {
-//        // Arrange
-//        var parser = new AnthropicStreamChunkParser(_options);
-//        var json = @"{""index"":0,""delta"":{""text"":""Hello""},""extra"":""value""}";
-//        var evt = new StreamEvent("content_block_delta", json);
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Act
-//        var result = parser.Parse(evt);
+    [Fact]
+    public void Parse_WithValidJsonButNullText_ReturnsNull()
+    {
+        // Arrange
+        var parser = new AnthropicStreamChunkParser(_options);
+        var json = @"{""delta"":{""text"":null}}";
+        var evt = new StreamEvent("content_block_delta", json);
 
-//        // Assert
-//        result.Should().NotBeNull();
-//        result.Content.Should().Be("Hello");
-//    }
-//}
+        // Act
+        var result = parser.Parse(evt);
+
+        // Assert
+        result.Should().BeNull();
+        _loggerMock.VerifyNoOtherCalls();
+    }
+
+    // ---------- Extra Fields ----------
+
+    [Fact]
+    public void Parse_WithExtraFields_IgnoresThem()
+    {
+        // Arrange
+        var parser = new AnthropicStreamChunkParser(_options);
+        var json = @"{""index"":0,""delta"":{""text"":""Hello""},""extra"":""value""}";
+        var evt = new StreamEvent("content_block_delta", json);
+
+        // Act
+        var result = parser.Parse(evt);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Content.Should().Be("Hello");
+        _loggerMock.VerifyNoOtherCalls();
+    }
+}

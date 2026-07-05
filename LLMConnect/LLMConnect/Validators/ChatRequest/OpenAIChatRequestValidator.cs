@@ -2,12 +2,12 @@
 
 namespace LLMConnect;
 
-internal class OpenAIChatRequestValidator : ChatRequestValidatorBase
+internal class OpenAIChatRequestValidator : ChatRequestValidatorBase, IChatRequestValidator
 {
     protected override void ValidateProviderSpecific(ChatRequest request, ILogger? logger)
     {
         // OpenAI supports ResponseFormat and Seed
-        if (!string.IsNullOrWhiteSpace(request.ResponseFormat) &&
+        if (!string.IsNullOrEmpty(request.ResponseFormat) &&
             request.ResponseFormat != "text" &&
             request.ResponseFormat != "json_object")
         {

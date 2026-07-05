@@ -49,7 +49,7 @@ internal abstract class ChatRequestValidatorBase: IChatRequestValidator
                     throw new ArgumentException($"Tool '{tool.Name}' must have a description.", nameof(request.Tools));
 
                 // Validate parameters
-                if (tool.Parameters == null)
+                if (tool.Parameters == null || !tool.Parameters.Any())
                     throw new ArgumentException($"Tool '{tool.Name}' must define parameters.", nameof(request.Tools));
 
                 var toolParameters = tool.Parameters.ToList();
@@ -57,17 +57,18 @@ internal abstract class ChatRequestValidatorBase: IChatRequestValidator
                 {
                     var paramKvp = toolParameters[index];
                     if (string.IsNullOrWhiteSpace(paramKvp.Value.Type))
-                        throw new ArgumentException($"Tool '{paramKvp.Key}' param '{paramKvp.Value.Type}' must have a type.", nameof(request.Tools));
+                        throw new ArgumentException($"Tool '{tool.Name}' parameter '{paramKvp.Key}' -> value, must have a type.", nameof(request.Tools));
                 
 
-                // Optional: additional checks for "object" type requiring Properties, etc.
-                // We can add more validation as needed.
+                    // Optional: additional checks for "object" type requiring Properties, etc.
+                    // We can add more validation as needed.
+                }
             }
+
         }
 
         // Provider-specific validation
         ValidateProviderSpecific(request, logger);
-    }
     }
 
     protected abstract void ValidateProviderSpecific(ChatRequest request, ILogger? logger);

@@ -158,7 +158,7 @@ public class LLMConnectClientTests
     // ---------- Dispose ----------
 
     [Fact]
-    public void Dispose_WhenOwnsClient_DisposesHttpClient()
+    public async void Dispose_WhenOwnsClient_DisposesHttpClient()
     {
         // Arrange
         var options = new LLMConnectClientOptions
@@ -181,8 +181,7 @@ public class LLMConnectClientTests
         try
         {
             // SendAsync will throw ObjectDisposedException if disposed.
-            httpClient!.SendAsync(new HttpRequestMessage(HttpMethod.Get, "http://example.com"))
-                      .GetAwaiter().GetResult();
+            await httpClient!.SendAsync(new HttpRequestMessage(HttpMethod.Get, "http://example.com"));
         }
         catch (ObjectDisposedException)
         {

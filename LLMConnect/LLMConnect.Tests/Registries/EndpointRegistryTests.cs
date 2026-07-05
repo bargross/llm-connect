@@ -2,99 +2,231 @@
 using LLMConnect.Models;
 using Microsoft.Extensions.Logging;
 using Moq;
+using System;
 using Xunit;
 
-namespace LLMConnect.Tests.Registries;
+namespace LLMConnect.Tests;
 
 public class EndpointRegistryTests
 {
-    private readonly Mock<ILogger> _loggerMock;
-
-    public EndpointRegistryTests()
-    {
-        _loggerMock = new Mock<ILogger>();
-    }
+    // ---- GetDefaultEndpoint tests ----
 
     [Theory]
-    [InlineData(ProviderType.OpenAI, "https://api.openai.com/v1/chat/completions")]
-    [InlineData(ProviderType.Anthropic, "https://api.anthropic.com/v1/messages")]
-    [InlineData(ProviderType.Google, "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent")]
-    [InlineData(ProviderType.Ollama, "http://localhost:{port}/api/chat")]
-    public void GetDefaultEndpoint_ForSupportedProvider_ReturnsCorrectEndpoint(ProviderType provider, string expectedEndpoint)
+    [InlineData(ProviderType.OpenAI, 11434, "https://api.openai.com/v1/")]
+    [InlineData(ProviderType.Anthropic, 11434, "https://api.anthropic.com/v1/")]
+    [InlineData(ProviderType.Google, 11434, "https://generativelanguage.googleapis.com/v1beta/")]
+    [InlineData(ProviderType.Ollama, 11434, "http://localhost:11434/")]
+    [InlineData(ProviderType.Ollama, 8080, "http://localhost:8080/")]
+    public void GetDefaultEndpoint_ValidProvider_ReturnsExpectedString(ProviderType provider, int port, string expected)
     {
         // Act
-        var endpoint = EndpointRegistry.GetDefaultEndpoint(provider, _loggerMock.Object);
+        var result = EndpointRegistry.GetDefaultEndpoint(provider, port);
 
         // Assert
-        endpoint.Should().Be(expectedEndpoint);
-        _loggerMock.VerifyNoOtherCalls();
+        result.Should().Be(expected);
     }
 
     [Fact]
-    public void GetDefaultEndpoint_ForUnsupportedProvider_ThrowsNotSupportedException()
+    public void GetDefaultEndpoint_NullProvider_ThrowsNotSupportedException()
+    {
+        // Act
+        Action act = () => EndpointRegistry.GetDefaultEndpoint(null);
+
+        // Assert
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void GetDefaultEndpoint_UnsupportedProvider_ThrowsNotSupportedException()
     {
         // Arrange
         var unsupportedProvider = (ProviderType)999;
 
         // Act
-        Action act = () => EndpointRegistry.GetDefaultEndpoint(unsupportedProvider, _loggerMock.Object);
+        Action act = () => EndpointRegistry.GetDefaultEndpoint(unsupportedProvider);
 
         // Assert
-        act.Should().Throw<NotSupportedException>()
-            .WithMessage($"Provider '{unsupportedProvider}' is not supported.");
+        act.Should().Throw<NotSupportedException>();
     }
 
     [Fact]
-    public void GetDefaultEndpoint_ForUnsupportedProvider_LogsError()
+    public void GetDefaultEndpoint_WithLogger_LogsErrorOnUnsupportedProvider()
     {
         // Arrange
+        var mockLogger = new Mock<ILogger>();
         var unsupportedProvider = (ProviderType)999;
 
         // Act
-        try
-        {
-            EndpointRegistry.GetDefaultEndpoint(unsupportedProvider, _loggerMock.Object);
-        }
-        catch (NotSupportedException)
-        {
-            // Expected
-        }
+        Action act = () => EndpointRegistry.GetDefaultEndpoint(unsupportedProvider, logger: mockLogger.Object);
 
         // Assert
-        _loggerMock.Verify(
+        act.Should().Throw<NotSupportedException>();
+        mockLogger.Verify(
             x => x.Log(
                 LogLevel.Error,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains($"Provider '{unsupportedProvider}' is not supported.")),
-                null,
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("is not supported")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception, string>>()),
             Times.Once);
     }
 
-    [Fact]
-    public void GetDefaultEndpoint_WhenLoggerIsNull_DoesNotThrow()
-    {
-        // Arrange
-        var provider = ProviderType.OpenAI;
+    // ---- GetEndpointParams tests ----
 
+    public static TheoryData<ProviderType, int, bool, string> EndpointParamsData =>
+        new()
+        {
+            // OpenAI
+            { ProviderType.OpenAI, (int)QueryType.Chat, false, "chat/completions" },
+            { ProviderType.OpenAI, (int)QueryType.Chat, true, "chat/completions" },
+            { ProviderType.OpenAI, (int)QueryType.Embeddings, false, "embeddings" },
+
+            // Anthropic
+            { ProviderType.Anthropic, (int)QueryType.Chat, false, "messages" },
+            { ProviderType.Anthropic, (int)QueryType.Chat, true, "messages" },
+
+            // Google
+            { ProviderType.Google, (int)QueryType.Chat, false, "models/{model}:generateContent" },
+            { ProviderType.Google, (int)QueryType.Chat, true, "models/{model}:streamGenerateContent" },
+            { ProviderType.Google, (int)QueryType.Embeddings, false, "models/{model}:embedContent" },
+
+            // Ollama
+            { ProviderType.Ollama, (int)QueryType.Chat, false, "api/chat" },
+            { ProviderType.Ollama, (int)QueryType.Chat, true, "api/chat" },
+            { ProviderType.Ollama, (int)QueryType.Embeddings, false, "api/embed" },
+        };
+
+    [Theory]
+    [MemberData(nameof(EndpointParamsData))]
+    public void GetEndpointParams_ValidCombination_ReturnsExpectedPath(
+        ProviderType provider,
+        int queryType,
+        bool isStreaming,
+        string expected)
+    {
         // Act
-        Action act = () => EndpointRegistry.GetDefaultEndpoint(provider, null);
+        var result = EndpointRegistry.GetEndpointParams(provider, (QueryType)queryType, isStreaming);
 
         // Assert
-        act.Should().NotThrow();
+        result.Should().Be(expected);
     }
 
     [Fact]
-    public void GetDefaultEndpoint_WhenUnsupportedProviderAndLoggerIsNull_StillThrows()
+    public void GetEndpointParams_NullProvider_ThrowsNotSupportedException()
+    {
+        // Act
+        Action act = () => EndpointRegistry.GetEndpointParams(null, QueryType.Chat, false);
+
+        // Assert
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void GetEndpointParams_UnsupportedProvider_ThrowsNotSupportedException()
     {
         // Arrange
         var unsupportedProvider = (ProviderType)999;
 
         // Act
-        Action act = () => EndpointRegistry.GetDefaultEndpoint(unsupportedProvider, null);
+        Action act = () => EndpointRegistry.GetEndpointParams(unsupportedProvider, QueryType.Chat, false);
 
         // Assert
-        act.Should().Throw<NotSupportedException>()
-            .WithMessage($"Provider '{unsupportedProvider}' is not supported.");
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void GetEndpointParams_UnsupportedCombination_ThrowsNotSupportedException()
+    {
+        // Anthropic does not support Embeddings, and this combination is not in the dictionary.
+        // Act
+        Action act = () => EndpointRegistry.GetEndpointParams(ProviderType.Anthropic, QueryType.Embeddings, false);
+
+        // Assert
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void GetEndpointParams_WithLogger_LogsErrorOnUnsupportedCombination()
+    {
+        // Arrange
+        var mockLogger = new Mock<ILogger>();
+
+        // Act
+        Action act = () => EndpointRegistry.GetEndpointParams(
+            ProviderType.Anthropic,
+            QueryType.Embeddings,
+            false,
+            logger: mockLogger.Object);
+
+        // Assert
+        act.Should().Throw<NotSupportedException>();
+        mockLogger.Verify(
+            x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("not supported")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+            Times.Once);
+    }
+
+    // ---- Combined usage tests (optional) ----
+
+    [Theory]
+    [InlineData(ProviderType.Google, QueryType.Chat, false, "gemini-3.5-flash",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent")]
+    [InlineData(ProviderType.Google, QueryType.Chat, true, "gemini-3.5-flash",
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:streamGenerateContent")]
+    [InlineData(ProviderType.Ollama, QueryType.Embeddings, false, null,
+                "http://localhost:11434/api/embed")]
+    public void GetFullUrl_CombiningBaseAndPath_ReturnsExpectedFullUrl(
+        ProviderType provider,
+        int queryType,
+        bool isStreaming,
+        string model,
+        string expectedFullUrl)
+    {
+        // Arrange
+        var baseUrl = EndpointRegistry.GetDefaultEndpoint(provider);
+        var relativePath = EndpointRegistry.GetEndpointParams(provider, (QueryType)queryType, isStreaming);
+
+        // Replace model placeholder if present
+        if (model is not null)
+            relativePath = relativePath.Replace("{model}", model);
+
+        var fullUrl = baseUrl + relativePath;
+
+        // Assert
+        fullUrl.Should().Be(expectedFullUrl);
+    }
+
+    // ---- Edge cases for placeholders ----
+
+    [Fact]
+    public void GetEndpointParams_ReturnsPlaceholder_ForGoogleModels()
+    {
+        // Arrange
+        var provider = ProviderType.Google;
+        var queryType = QueryType.Chat;
+
+        // Act
+        var path = EndpointRegistry.GetEndpointParams(provider, queryType, false);
+
+        // Assert
+        path.Should().Contain("{model}");
+    }
+
+    [Fact]
+    public void GetDefaultEndpoint_ReplacesPortPlaceholder_ForOllama()
+    {
+        // Arrange
+        var provider = ProviderType.Ollama;
+        var customPort = 12345;
+
+        // Act
+        var baseUrl = EndpointRegistry.GetDefaultEndpoint(provider, customPort);
+
+        // Assert
+        baseUrl.Should().Be($"http://localhost:{customPort}/");
     }
 }

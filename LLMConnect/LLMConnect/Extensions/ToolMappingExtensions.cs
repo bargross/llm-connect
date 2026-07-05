@@ -77,11 +77,14 @@ internal static class ToolMappingExtensions
     {
         var dict = new Dictionary<string, object>
         {
-            ["type"] = "object",
-            ["properties"] = tool.Parameters.ToDictionary(
-                kvp => kvp.Key,
-                kvp => kvp.Value.ToDictionary()
-            )
+            { 
+                "type", "object" 
+            },
+            {
+                "properties", tool.Parameters.ToDictionary(
+                                kvp => kvp.Key,
+                                kvp => kvp.Value.ToDictionary())
+            }   
         };
 
         if (tool.Required != null && tool.Required.Count > 0)

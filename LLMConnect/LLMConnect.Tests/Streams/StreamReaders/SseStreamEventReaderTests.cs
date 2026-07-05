@@ -1,224 +1,278 @@
-﻿//using FluentAssertions;
-//using LLMConnect.Settings;
-//using Microsoft.Extensions.Logging;
-//using Moq;
-//using System.Text;
-//using Xunit;
+﻿using FluentAssertions;
+using LLMConnect.Settings;
+using Microsoft.Extensions.Logging;
+using Moq;
+using System.Text;
+using Xunit;
 
-//namespace LLMConnect.Tests.Streams.StreamReaders;
+namespace LLMConnect.Tests.Streams.StreamReaders;
 
-//public class SseStreamEventReaderTests
-//{
-//    [Fact]
-//    public async Task ReadEventsAsync_WithEventAndData_YieldsCorrectEvents()
-//    {
-//        // Arrange
-//        var sseData = """
-//        event: content_block_delta
-//        data: {"delta":{"text":"Hello"}}
+public class SseStreamEventReaderTests
+{
+    private readonly Mock<ILogger<SseStreamEventReader>> _loggerMock;
+    private readonly Mock<ILoggerFactory> _loggerFactoryMock;
+    private readonly LLMConnectGeneralOptions _options;
 
-//        event: content_block_delta
-//        data: {"delta":{"text":" world"}}
-//        """;
+    public SseStreamEventReaderTests()
+    {
+        _loggerMock = new Mock<ILogger<SseStreamEventReader>>();
+        _loggerFactoryMock = new Mock<ILoggerFactory>();
+        _loggerFactoryMock
+            .Setup(x => x.CreateLogger(It.IsAny<string>()))
+            .Returns(_loggerMock.Object);
 
-//        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
-//        var reader = new SseStreamEventReader();
+        _options = new LLMConnectGeneralOptions
+        {
+            LoggerFactory = _loggerFactoryMock.Object
+        };
+    }
 
-//        // Act
-//        var events = await reader.ReadEventsAsync(stream).ToListAsync();
+    // Helper to create a stream from string
+    private static Stream CreateStream(string content)
+    {
+        return new MemoryStream(Encoding.UTF8.GetBytes(content));
+    }
 
-//        // Assert
-//        events.Should().HaveCount(2);
-//        events[0].EventName.Should().Be("content_block_delta");
-//        events[0].Data.Should().Be(@"{""delta"":{""text"":""Hello""}}");
-//        events[1].EventName.Should().Be("content_block_delta");
-//        events[1].Data.Should().Be(@"{""delta"":{""text"":"" world""}}");
-//    }
+    // ---------- Event and Data ----------
 
-//    [Fact]
-//    public async Task ReadEventsAsync_WithDataOnly_EventNameIsNull()
-//    {
-//        // Arrange
-//        var sseData = @"
-//            data: {""choices"":[{""delta"":{""content"":""Hello""}}]}
-//        ".Trim();
+    [Fact]
+    public async Task ReadEventsAsync_WithEventAndData_YieldsCorrectEvents()
+    {
+        var content = """
+            event: content_block_delta
+            data: {"delta":{"text":"Hello"}}
 
-//        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
-//        var reader = new SseStreamEventReader();
+            event: content_block_delta
+            data: {"delta":{"text":" world"}}
+            """;
+        using var stream = CreateStream(content);
+        var reader = new SseStreamEventReader(_options);
 
-//        // Act
-//        var events = await reader.ReadEventsAsync(stream).ToListAsync();
+        var events = await reader.ReadEventsAsync(stream).ToListAsync();
 
-//        // Assert
-//        events.Should().HaveCount(1);
-//        events[0].EventName.Should().BeNull();
-//        events[0].Data.Should().Be(@"{""choices"":[{""delta"":{""content"":""Hello""}}]}");
-//    }
+        events.Should().HaveCount(2);
+        events[0].EventName.Should().Be("content_block_delta");
+        events[0].Data.Should().Be(@"{""delta"":{""text"":""Hello""}}");
+        events[1].EventName.Should().Be("content_block_delta");
+        events[1].Data.Should().Be(@"{""delta"":{""text"":"" world""}}");
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//    [Fact]
-//    public async Task ReadEventsAsync_WithMultipleEvents_YieldsAll()
-//    {
-//        // Arrange
-//        var sseData = """
-//        event: message_start
-//        data: {"id":"msg_123"}
+    [Fact]
+    public async Task ReadEventsAsync_WithEventAndDataAndEmptyLines_SkipsEmptyLines()
+    {
+        var content = """
 
-//        event: content_block_delta
-//        data: {"delta":{"text":"Hello"}}
+            event: test
+            data: 123
 
-//        event: message_stop
-//        data: {}
-//        """;
 
-//        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
-//        var reader = new SseStreamEventReader();
+            """;
+        using var stream = CreateStream(content);
+        var reader = new SseStreamEventReader(_options);
 
-//        // Act
-//        var events = await reader.ReadEventsAsync(stream).ToListAsync();
+        var events = await reader.ReadEventsAsync(stream).ToListAsync();
 
-//        // Assert
-//        events.Should().HaveCount(3);
-//        events[0].EventName.Should().Be("message_start");
-//        events[0].Data.Should().Be(@"{""id"":""msg_123""}");
-//        events[1].EventName.Should().Be("content_block_delta");
-//        events[1].Data.Should().Be(@"{""delta"":{""text"":""Hello""}}");
-//        events[2].EventName.Should().Be("message_stop");
-//        events[2].Data.Should().Be("{}");
-//    }
+        events.Should().HaveCount(1);
+        events[0].EventName.Should().Be("test");
+        events[0].Data.Should().Be("123");
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//    [Fact]
-//    public async Task ReadEventsAsync_WithDoneSentinel_YieldsBreak()
-//    {
-//        // Arrange
-//        var sseData = """
-//        event: message_start
-//        data: {"id":"msg_123"}
+    // ---------- Data only ----------
 
-//        data: [DONE]
-//        """;
+    [Fact]
+    public async Task ReadEventsAsync_WithDataOnly_EventNameIsNull()
+    {
+        var content = """
+            data: {"choices":[{"delta":{"content":"Hello"}}]}
+            """;
+        using var stream = CreateStream(content);
+        var reader = new SseStreamEventReader(_options);
 
-//        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
-//        var reader = new SseStreamEventReader();
+        var events = await reader.ReadEventsAsync(stream).ToListAsync();
 
-//        // Act
-//        var events = await reader.ReadEventsAsync(stream).ToListAsync();
+        events.Should().HaveCount(1);
+        events[0].EventName.Should().BeNull();
+        events[0].Data.Should().Be(@"{""choices"":[{""delta"":{""content"":""Hello""}}]}");
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Assert
-//        events.Should().HaveCount(2);
-//        events[0].EventName.Should().Be("message_start");
-//        events[0].Data.Should().Be(@"{""id"":""msg_123""}");
-//        events[1].EventName.Should().BeNull(); // event name is carried over? Actually after the break it yields the sentinel event.
-//        events[1].Data.Should().Be("[DONE]");
-//    }
+    // ---------- Event name persists until data ----------
 
-//    [Fact]
-//    public async Task ReadEventsAsync_WithCancellation_LogsAndBreaks()
-//    {
-//        // Arrange
-//        var loggerMock = new Mock<ILogger>();
-//        var options = new LLMConnectClientOptions
-//        {
-//            LoggerFactory = LoggerFactory.Create(builder => builder.AddConsole())
-//        };
+    [Fact]
+    public async Task ReadEventsAsync_EventNamePersistsAcrossLines()
+    {
+        var content = """
+            event: message_start
+            data: {"id":"1"}
+            data: {"id":"2"}
+            """;
+        using var stream = CreateStream(content);
+        var reader = new SseStreamEventReader(_options);
 
-//        // Use a custom logger factory that returns our mock
-//        var loggerFactoryMock = new Mock<ILoggerFactory>();
-//        loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>()))
-//            .Returns(loggerMock.Object);
-//        options.LoggerFactory = loggerFactoryMock.Object;
+        var events = await reader.ReadEventsAsync(stream).ToListAsync();
 
-//        var reader = new SseStreamEventReader(options);
+        events.Should().HaveCount(2);
+        events[0].EventName.Should().Be("message_start");
+        events[0].Data.Should().Be(@"{""id"":""1""}");
+        events[1].EventName.Should().Be("message_start");
+        events[1].Data.Should().Be(@"{""id"":""2""}");
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // We need a stream that will cause a cancellation during ReadLineAsync.
-//        // The simplest is to use a stream that never ends and then cancel after a short delay.
-//        // Or we can use a CancellationTokenSource and cancel after some time.
-//        // We'll simulate by passing a cancellation token that is already cancelled.
-//        using var cts = new CancellationTokenSource();
-//        cts.Cancel();
+    // ---------- Done sentinel ----------
 
-//        // Use a memory stream with valid SSE data, but cancellation will happen before any read.
-//        var sseData = @"
-//            data: hello
-//        ".Trim();
-//        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
+    [Fact]
+    public async Task ReadEventsAsync_WithDoneSentinel_YieldsBreak()
+    {
+        var content = """
+            event: message_start
+            data: {"id":"1"}
 
-//        // Act: ReadEventsAsync will be called with the cancelled token.
-//        // It will hit the read line and throw OperationCanceledException.
-//        var enumerator = reader.ReadEventsAsync(stream, cts.Token).GetAsyncEnumerator();
-//        var moveNextTask = enumerator.MoveNextAsync();
+            data: [DONE]
+            data: {"id":"2"}
+            """;
+        using var stream = CreateStream(content);
+        var reader = new SseStreamEventReader(_options);
 
-//        // Since cancellation is immediate, we should get an OperationCanceledException (or the loop breaks).
-//        // However, the code catches OperationCanceledException and breaks, so moveNextTask should return false (completed normally).
-//        // Actually it breaks and returns false. We need to check that it completed and logged.
-//        var result = await moveNextTask; // Should be false
-//        result.Should().BeFalse();
+        var events = await reader.ReadEventsAsync(stream).ToListAsync();
 
-//        // Verify logger logged the error message.
-//        loggerMock.Verify(x => x.Log(
-//            LogLevel.Error,
-//            It.IsAny<EventId>(),
-//            It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Stream has ended.")),
-//            It.IsAny<Exception>(),
-//            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-//            Times.Once);
-//    }
+        events.Should().HaveCount(2);
+        events[0].EventName.Should().Be("message_start");
+        events[0].Data.Should().Be(@"{""id"":""1""}");
+        events[1].EventName.Should().Be("message_start"); // currentEvent is carried over
+        events[1].Data.Should().Be("[DONE]");
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//    [Fact]
-//    public async Task ReadEventsAsync_WithEmptyLines_SkipsThem()
-//    {
-//        // Arrange
-//        var sseData = """
-//        event: test
-//        data: 123
+    // ---------- Invalid lines ----------
 
-//        """;
+    [Fact]
+    public async Task ReadEventsAsync_WithInvalidLines_IgnoresThem()
+    {
+        var content = """
+            invalid: line
+            event: test
+            data: 123
+            """;
+        using var stream = CreateStream(content);
+        var reader = new SseStreamEventReader(_options);
 
-//        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
-//        var reader = new SseStreamEventReader();
+        var events = await reader.ReadEventsAsync(stream).ToListAsync();
 
-//        // Act
-//        var events = await reader.ReadEventsAsync(stream).ToListAsync();
+        events.Should().HaveCount(1);
+        events[0].EventName.Should().Be("test");
+        events[0].Data.Should().Be("123");
+        _loggerMock.VerifyNoOtherCalls();
+    }
 
-//        // Assert
-//        events.Should().HaveCount(1);
-//        events[0].EventName.Should().Be("test");
-//        events[0].Data.Should().Be("123");
-//    }
+    // ---------- Cancellation ----------
 
-//    [Fact]
-//    public async Task ReadEventsAsync_WithInvalidLines_Ignores()
-//    {
-//        // Arrange
-//        var sseData = """
-//        invalid: line
-//        event: test
-//        data: 123
-//        """;
+    [Fact]
+    public async Task ReadEventsAsync_WithCancellation_LogsAndBreaks()
+    {
+        var content = """
+            event: test
+            data: 123
+            event: test2
+            data: 456
+            """;
+        using var stream = CreateStream(content);
+        using var cts = new CancellationTokenSource();
+        var reader = new SseStreamEventReader(_options);
 
-//        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
-//        var reader = new SseStreamEventReader();
+        var enumerator = reader.ReadEventsAsync(stream, cts.Token).GetAsyncEnumerator();
+        var hasNext = await enumerator.MoveNextAsync();
+        hasNext.Should().BeTrue();
+        enumerator.Current.Data.Should().Be("123");
 
-//        // Act
-//        var events = await reader.ReadEventsAsync(stream).ToListAsync();
+        // Cancel and try to get next
+        cts.Cancel();
+        var nextHasNext = await enumerator.MoveNextAsync();
+        nextHasNext.Should().BeFalse();
 
-//        // Assert
-//        events.Should().HaveCount(1);
-//        events[0].EventName.Should().Be("test");
-//        events[0].Data.Should().Be("123");
-//    }
+        _loggerMock.Verify(
+            x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Stream has ended.")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
 
-//    [Fact]
-//    public async Task ReadEventsAsync_WithNoData_ReturnsEmpty()
-//    {
-//        // Arrange
-//        var sseData = "";
-//        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(sseData));
-//        var reader = new SseStreamEventReader();
+    // ---------- No data ----------
 
-//        // Act
-//        var events = await reader.ReadEventsAsync(stream).ToListAsync();
+    [Fact]
+    public async Task ReadEventsAsync_WithNoData_ReturnsEmpty()
+    {
+        using var stream = new MemoryStream();
+        var reader = new SseStreamEventReader(_options);
 
-//        // Assert
-//        events.Should().BeEmpty();
-//    }
-//}
+        var events = await reader.ReadEventsAsync(stream).ToListAsync();
+
+        events.Should().BeEmpty();
+        _loggerMock.VerifyNoOtherCalls();
+    }
+
+    // ---------- Logger null ----------
+
+    [Fact]
+    public async Task ReadEventsAsync_WhenLoggerIsNull_DoesNotThrow()
+    {
+        var optionsWithoutLogger = new LLMConnectGeneralOptions { LoggerFactory = null };
+        var content = "event: test\ndata: 123\n";
+        using var stream = CreateStream(content);
+        var reader = new SseStreamEventReader(optionsWithoutLogger);
+
+        var act = async () => await reader.ReadEventsAsync(stream).ToListAsync();
+
+        await act.Should().NotThrowAsync();
+    }
+
+    // ---------- Cancellation without logger ----------
+
+    [Fact]
+    public async Task ReadEventsAsync_WithCancellationAndNoLogger_DoesNotThrow()
+    {
+        var optionsWithoutLogger = new LLMConnectGeneralOptions { LoggerFactory = null };
+        var content = "event: test\ndata: 123\n";
+        using var stream = CreateStream(content);
+        using var cts = new CancellationTokenSource();
+        var reader = new SseStreamEventReader(optionsWithoutLogger);
+
+        cts.Cancel();
+        var act = async () =>
+        {
+            var enumerator = reader.ReadEventsAsync(stream, cts.Token).GetAsyncEnumerator();
+            await enumerator.MoveNextAsync();
+        };
+
+        await act.Should().NotThrowAsync();
+    }
+
+    // ---------- Multiple events with same event name ----------
+
+    [Fact]
+    public async Task ReadEventsAsync_MultipleEventsWithSameName_ResetsEventNameAfterYield()
+    {
+        var content = """
+            event: content_block_delta
+            data: {"delta":{"text":"Hello"}}
+            event: content_block_delta
+            data: {"delta":{"text":" world"}}
+            """;
+        using var stream = CreateStream(content);
+        var reader = new SseStreamEventReader(_options);
+
+        var events = await reader.ReadEventsAsync(stream).ToListAsync();
+
+        events.Should().HaveCount(2);
+        events[0].EventName.Should().Be("content_block_delta");
+        events[1].EventName.Should().Be("content_block_delta");
+        // The event name is reset after the first data line, but the second event line sets it again.
+        // The second data line will have the same event name.
+        events[1].EventName.Should().Be("content_block_delta");
+    }
+}

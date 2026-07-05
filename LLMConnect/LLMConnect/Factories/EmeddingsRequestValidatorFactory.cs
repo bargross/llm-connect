@@ -5,7 +5,7 @@ namespace LLMConnect;
 
 internal static class EmbeddingRequestValidatorFactory
 {
-    public static IEmbeddingRequestValidator? Create(ProviderType provider, ILogger? logger = null)
+    public static IEmbeddingRequestValidator Create(ProviderType? provider, ILogger? logger = null)
     {
         return provider switch
         {
@@ -13,7 +13,7 @@ internal static class EmbeddingRequestValidatorFactory
             ProviderType.Anthropic => new AnthropicEmbeddingRequestValidator(),
             ProviderType.Google => new GoogleEmbeddingRequestValidator(),
             ProviderType.Ollama => new OllamaEmbeddingRequestValidator(),
-            _ => throw new NotSupportedException($"Provider '{provider}' is not supported for embeddings.")
+            _ => throw new NotSupportedException($"Provider '{provider?.ToString()}' is not supported for embeddings.")
         };
     }
 }

@@ -9,10 +9,10 @@ namespace LLMConnect.Settings
     public class LLMConnectGeneralOptions
     {
         /// <summary>The LLM provider to target.</summary>
-        public ProviderType Provider { get; set; } = ProviderType.OpenAI;
+        public ProviderType? Provider { get; set; } = ProviderType.OpenAI;
 
         /// <summary>The API key for the configured provider. Not required when <see cref="Provider"/> is <see cref="ProviderType.Ollama"/>.</summary>
-        public string ApiKey { get; set; } = string.Empty;
+        public string? ApiKey { get; set; } = string.Empty;
 
         /// <summary>The model used for a request when <see cref="ChatRequest.Model"/> is not set.</summary>
         public string? DefaultModel { get; set; }
