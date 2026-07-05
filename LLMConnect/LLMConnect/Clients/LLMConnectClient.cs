@@ -17,7 +17,7 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
     private readonly ILogger<LLMConnectClient>? _logger;
 
     /// <summary>
-    /// user provides only options (library creates HttpClient)
+    /// user provides only options, the library creates HttpClient (backward compatible for older versions of LLMConnect)
     /// </summary>
     /// <param name="options"></param>
     public LLMConnectClient(LLMConnectClientOptions options)
@@ -37,7 +37,7 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
 
 
     /// <summary>
-    /// for the user to provide their own client already configured
+    /// for the user to provide their own client already configured (backward compatible for older versions of LLMConnect)
     /// </summary>
     /// <param name="options">library options</param>
     /// <param name="httpClient">user defined client</param>
@@ -55,10 +55,10 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
     }
 
     /// <summary>
-    /// for the user to provide their own client already configured
+    /// user provides only options (library creates HttpClient)
     /// </summary>
-    /// <param name="generalOpts">general options </param>
-    /// <param name="endpointOpts">endpoint-specific options</param>
+    /// <param name="generalOpts"></param>
+    /// <param name="endpointOpts"></param>
     public LLMConnectClient(LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions? endpointOpts)
         : this(generalOpts, endpointOpts ?? new LLMConnectEndpointOptions(), 
               new HttpClient(
@@ -98,7 +98,7 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
     }
 
     /// <summary>
-    /// for the user to provide an IHttpClientFactory
+    /// for the user to provide an IHttpClientFactory (backward compatibility for older versions of LLMConnect)
     /// </summary>
     /// <param name="options">library options</param>
     /// <param name="httpClientFactory">user defined client factory</param>
