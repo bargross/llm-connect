@@ -8,12 +8,15 @@ namespace LLMConnect.Tests.MappingExtensions;
 public class LLMConnectClientOptionsExtensionsTests
 {
     // ---------- InternalComputedDefaultModel ----------
-
+    //ProviderType.Ollama => "qwen2.5:7b-instruct",
+    //                ProviderType.Google => "gemini-3.5-flash",
+    //                ProviderType.Anthropic => "claude-sonnet-5",
+    //                ProviderType.OpenAI => "gpt-5.5",
     [Theory]
-    [InlineData(ProviderType.OpenAI, "gpt-3.5-turbo")]
-    [InlineData(ProviderType.Anthropic, "claude-3-5-sonnet-20241022")]
-    [InlineData(ProviderType.Google, "gemini-2.0-flash")]
-    [InlineData(ProviderType.Ollama, "llama3.2")]
+    [InlineData(ProviderType.OpenAI, "gpt-5.5")]
+    [InlineData(ProviderType.Anthropic, "claude-sonnet-5")]
+    [InlineData(ProviderType.Google, "gemini-3.5-flash")]
+    [InlineData(ProviderType.Ollama, "qwen2.5:7b-instruct")]
     public void InternalComputedDefaultModel_WhenNoModelOrDefault_ReturnsProviderDefault(ProviderType provider, string expectedDefault)
     {
         // Arrange

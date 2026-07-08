@@ -5,10 +5,35 @@ using Moq;
 using System;
 using Xunit;
 
-namespace LLMConnect.Tests;
+namespace LLMConnect.Registries;
 
 public class EndpointRegistryTests
 {
+
+    public static TheoryData<ProviderType, int, bool, string> EndpointParamsData =>
+        new()
+        {
+            // OpenAI
+            { ProviderType.OpenAI, (int)QueryType.Chat, false, "chat/completions" },
+            { ProviderType.OpenAI, (int)QueryType.Chat, true, "chat/completions" },
+            { ProviderType.OpenAI, (int)QueryType.Embeddings, false, "embeddings" },
+
+            // Anthropic
+            { ProviderType.Anthropic, (int)QueryType.Chat, false, "messages" },
+            { ProviderType.Anthropic, (int)QueryType.Chat, true, "messages" },
+
+            // Google
+            { ProviderType.Google, (int)QueryType.Chat, false, "models/{model}:generateContent" },
+            { ProviderType.Google, (int)QueryType.Chat, true, "models/{model}:streamGenerateContent" },
+            { ProviderType.Google, (int)QueryType.Embeddings, false, "models/{model}:embedContent" },
+
+            // Ollama
+            { ProviderType.Ollama, (int)QueryType.Chat, false, "api/chat" },
+            { ProviderType.Ollama, (int)QueryType.Chat, true, "api/chat" },
+            { ProviderType.Ollama, (int)QueryType.Embeddings, false, "api/embed" },
+        };
+
+
     // ---- GetDefaultEndpoint tests ----
 
     [Theory]
@@ -27,13 +52,13 @@ public class EndpointRegistryTests
     }
 
     [Fact]
-    public void GetDefaultEndpoint_NullProvider_ThrowsNotSupportedException()
+    public void GetDefaultEndpoint_NullProvider_ThrowsArgumentNullException()
     {
         // Act
         Action act = () => EndpointRegistry.GetDefaultEndpoint(null);
 
         // Assert
-        act.Should().Throw<NotSupportedException>();
+        act.Should().Throw<ArgumentNullException>();
     }
 
     [Fact]
@@ -73,29 +98,6 @@ public class EndpointRegistryTests
 
     // ---- GetEndpointParams tests ----
 
-    public static TheoryData<ProviderType, int, bool, string> EndpointParamsData =>
-        new()
-        {
-            // OpenAI
-            { ProviderType.OpenAI, (int)QueryType.Chat, false, "chat/completions" },
-            { ProviderType.OpenAI, (int)QueryType.Chat, true, "chat/completions" },
-            { ProviderType.OpenAI, (int)QueryType.Embeddings, false, "embeddings" },
-
-            // Anthropic
-            { ProviderType.Anthropic, (int)QueryType.Chat, false, "messages" },
-            { ProviderType.Anthropic, (int)QueryType.Chat, true, "messages" },
-
-            // Google
-            { ProviderType.Google, (int)QueryType.Chat, false, "models/{model}:generateContent" },
-            { ProviderType.Google, (int)QueryType.Chat, true, "models/{model}:streamGenerateContent" },
-            { ProviderType.Google, (int)QueryType.Embeddings, false, "models/{model}:embedContent" },
-
-            // Ollama
-            { ProviderType.Ollama, (int)QueryType.Chat, false, "api/chat" },
-            { ProviderType.Ollama, (int)QueryType.Chat, true, "api/chat" },
-            { ProviderType.Ollama, (int)QueryType.Embeddings, false, "api/embed" },
-        };
-
     [Theory]
     [MemberData(nameof(EndpointParamsData))]
     public void GetEndpointParams_ValidCombination_ReturnsExpectedPath(
@@ -109,16 +111,6 @@ public class EndpointRegistryTests
 
         // Assert
         result.Should().Be(expected);
-    }
-
-    [Fact]
-    public void GetEndpointParams_NullProvider_ThrowsNotSupportedException()
-    {
-        // Act
-        Action act = () => EndpointRegistry.GetEndpointParams(null, QueryType.Chat, false);
-
-        // Assert
-        act.Should().Throw<NotSupportedException>();
     }
 
     [Fact]
@@ -173,11 +165,11 @@ public class EndpointRegistryTests
     // ---- Combined usage tests (optional) ----
 
     [Theory]
-    [InlineData(ProviderType.Google, QueryType.Chat, false, "gemini-3.5-flash",
+    [InlineData(ProviderType.Google, (int)QueryType.Chat, false, "gemini-3.5-flash",
                 "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent")]
-    [InlineData(ProviderType.Google, QueryType.Chat, true, "gemini-3.5-flash",
+    [InlineData(ProviderType.Google, (int)QueryType.Chat, true, "gemini-3.5-flash",
                 "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:streamGenerateContent")]
-    [InlineData(ProviderType.Ollama, QueryType.Embeddings, false, null,
+    [InlineData(ProviderType.Ollama, (int)QueryType.Embeddings, false, null,
                 "http://localhost:11434/api/embed")]
     public void GetFullUrl_CombiningBaseAndPath_ReturnsExpectedFullUrl(
         ProviderType provider,

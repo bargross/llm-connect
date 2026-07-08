@@ -11,7 +11,7 @@ internal class TestProvider : ProviderBase<TestProvider>
     public new async Task<string> ExtractErrorMessage(HttpResponseMessage response, CancellationToken cancellationToken)
         => await base.ExtractErrorMessage(response, cancellationToken);
 
-    public new async Task LogAndThrow(ProviderType providerType, HttpResponseMessage response, CancellationToken cancellationToken)
+    public async Task LogAndThrow(ProviderType providerType, HttpResponseMessage response, CancellationToken cancellationToken)
         => await base.LogAndThrow(providerType, response, cancellationToken);
 
     public new IAsyncEnumerable<ChatChunk> ReadFromStreamAsync(
@@ -19,11 +19,11 @@ internal class TestProvider : ProviderBase<TestProvider>
         LLMConnectGeneralOptions generalOpts,
         LLMConnectEndpointOptions endpointOpts,
         CancellationToken cancellationToken)
-        => base.ReadFromStreamAsync(stream, generalOpts, endpointOpts, cancellationToken);\
+        => base.ReadFromStreamAsync(stream, generalOpts, endpointOpts, cancellationToken);
 
-    public List<string> GetRequestedUrls() => _server.RequestedUrls;
-        
-    public new async Task<TResponse?> DeserializeResponseAsync<TProviderResponse, TResponse>(
+    //public List<string> GetRequestedUrls() => _;
+
+    public async Task<TResponse?> DeserializeResponseAsync<TProviderResponse, TResponse>(
         HttpResponseMessage response,
         ProviderType provider,
         Func<bool> customDeserializerEvaluator,

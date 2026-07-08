@@ -27,23 +27,23 @@ internal static class EndpointRegistry
     private static readonly Dictionary<(ProviderType Provider, QueryType Query, bool IsStreaming), string> _relativePaths = new()
     {
         // OpenAI
-        { (ProviderType.OpenAI, QueryType.Chat, false), "/chat/completions" },
-        { (ProviderType.OpenAI, QueryType.Chat, true),  "/chat/completions" },   // stream flag in body
-        { (ProviderType.OpenAI, QueryType.Embeddings, false), "/embeddings" },
+        { (ProviderType.OpenAI, QueryType.Chat, false), "chat/completions" },
+        { (ProviderType.OpenAI, QueryType.Chat, true),  "chat/completions" },   // stream flag in body
+        { (ProviderType.OpenAI, QueryType.Embeddings, false), "embeddings" },
 
         // Anthropic
-        { (ProviderType.Anthropic, QueryType.Chat, false), "/messages" },
-        { (ProviderType.Anthropic, QueryType.Chat, true),  "/messages" },       // stream flag in body
+        { (ProviderType.Anthropic, QueryType.Chat, false), "messages" },
+        { (ProviderType.Anthropic, QueryType.Chat, true),  "messages" },       // stream flag in body
 
         // Google
-        { (ProviderType.Google, QueryType.Chat, false), "/models/{model}:generateContent" },
-        { (ProviderType.Google, QueryType.Chat, true),  "/models/{model}:streamGenerateContent" },
-        { (ProviderType.Google, QueryType.Embeddings, false), "/models/{model}:embedContent" },
+        { (ProviderType.Google, QueryType.Chat, false), "models/{model}:generateContent" },
+        { (ProviderType.Google, QueryType.Chat, true),  "models/{model}:streamGenerateContent" },
+        { (ProviderType.Google, QueryType.Embeddings, false), "models/{model}:embedContent" },
 
         // Ollama
-        { (ProviderType.Ollama, QueryType.Chat, false), "/api/chat" },
-        { (ProviderType.Ollama, QueryType.Chat, true),  "/api/chat" },         // stream flag in body
-        { (ProviderType.Ollama, QueryType.Embeddings, false), "/api/embed" }
+        { (ProviderType.Ollama, QueryType.Chat, false), "api/chat" },
+        { (ProviderType.Ollama, QueryType.Chat, true),  "api/chat" },         // stream flag in body
+        { (ProviderType.Ollama, QueryType.Embeddings, false), "api/embed" }
     };
 
     /// <summary>
@@ -52,21 +52,23 @@ internal static class EndpointRegistry
     /// </summary>
     public static string GetDefaultEndpoint(ProviderType? provider, int? port = 11434, ILogger? logger = null)
     {
+        if (provider == null) throw new ArgumentNullException(nameof(provider));
+
         if (!_domains.TryGetValue(provider.Value, out var domain))
         {
             var message = $"Provider '{provider}' is not supported.";
 
             logger?.LogError(message);
 
-            throw new NotSupportedException();
+            throw new NotSupportedException(message);
         }
 
         var version = _apiVersions.GetValueOrDefault(provider.Value, "");
-        var baseUrl = domain + version + "/";
+        var baseUrl = $"{domain}{version}/";
 
-        // Replace port placeholder if present
-        baseUrl = baseUrl.Replace("{port}", port.ToString());
-
+        if (provider == ProviderType.Ollama)
+            baseUrl = baseUrl.Replace("{port}", port?.ToString());
+        
         return baseUrl;
     }
 
@@ -76,6 +78,8 @@ internal static class EndpointRegistry
     /// </summary>
     public static string GetEndpointParams(ProviderType? provider, QueryType queryType, bool isStreaming, ILogger? logger = null)
     {
+        if (provider == null) throw new ArgumentNullException(nameof(provider));
+
         var key = (provider.Value, queryType, isStreaming);
         if (_relativePaths.TryGetValue(key, out var path))
             return path;
@@ -84,6 +88,6 @@ internal static class EndpointRegistry
 
         logger?.LogError(message);
 
-        throw new NotSupportedException();
+        throw new NotSupportedException(message);
     }
 }

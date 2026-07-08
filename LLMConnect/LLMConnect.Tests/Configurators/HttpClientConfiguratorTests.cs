@@ -38,8 +38,8 @@ public class HttpClientConfiguratorTests
     [Theory]
     [InlineData(ProviderType.OpenAI, "https://api.openai.com/v1/")]
     [InlineData(ProviderType.Anthropic, "https://api.anthropic.com/v1/")]
-    [InlineData(ProviderType.Google, "https://generativelanguage.googleapis.com/v1beta/models/")]
-    [InlineData(ProviderType.Ollama, "http://localhost:11434/api/")]
+    [InlineData(ProviderType.Google, "https://generativelanguage.googleapis.com/v1beta/")]
+    [InlineData(ProviderType.Ollama, "http://localhost:11434/")]
     public void ConfigureForProvider_WithDefaultEndpoint_SetsCorrectBaseAddress(ProviderType provider, string expectedBaseAddress)
     {
         var general = new LLMConnectGeneralOptions
@@ -85,7 +85,7 @@ public class HttpClientConfiguratorTests
 
         var configuredClient = HttpClientConfigurator.ConfigureForProvider(general, endpoint, client);
 
-        configuredClient.BaseAddress!.ToString().Should().Be("http://localhost:11435/api/");
+        configuredClient.BaseAddress!.ToString().Should().Be("http://localhost:11435/");
     }
 
     [Fact]
