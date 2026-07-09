@@ -42,6 +42,7 @@ namespace LLMConnect
             return new LLMConnectEndpointOptions
             {
                 Endpoint = options.Endpoint,
+                BaseUrl = options.BaseUrl,
                 OllamaPort = options.OllamaPort,
                 ChatResponseDeserializer = options.ChatResponseDeserializer,
                 EmbeddingResponseDeserializer = options.EmbeddingResponseDeserializer,

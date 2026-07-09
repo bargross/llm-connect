@@ -19,10 +19,19 @@ public class LLMConnectClientOptions
     public string? DefaultModel { get; set; }
 
     /// <summary>
-    /// An optional override for the provider's default endpoint URL. Takes
-    /// precedence over <see cref="OllamaPort"/> when both are set.
+    /// A complete, literal URL to call for every operation on this provider.
+    /// When set, the library does NOT append any resource path or perform
+    /// {model} substitution — the URL is used exactly as given.
     /// </summary>
     public string? Endpoint { get; set; }
+
+    /// <summary>
+    /// Overrides just the provider's domain (+ version segment). The library
+    /// still builds the correct resource path (messages, chat/completions,
+    /// models/{model}:generateContent, etc.) on top of this, same as it does
+    /// for the built-in default endpoints.
+    /// </summary>
+    public string? BaseUrl { get; set; }
 
     /// <summary>
     /// The port a local Ollama server is listening on. Defaults to <c>11434</c>
