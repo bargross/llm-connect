@@ -12,12 +12,12 @@ namespace LLMConnect.Tests.Integration;
 
 public class GoogleIntegrationTests : IntegrationTestBase
 {
-    public GoogleIntegrationTests() : base(ProviderType.Google, "/v1beta/models/gemini-3.5-flash:generateContent") { }
+    public GoogleIntegrationTests() : base(ProviderType.Google, "models/gemini-3.5-flash:generateContent") { }
 
     // ---------- Stubs ----------
     private void StubChat(string responseJson, HttpStatusCode statusCode = HttpStatusCode.OK)
         => _server
-            .Given(Request.Create().WithPath("/v1beta/models/gemini-3.5-flash:generateContent").UsingPost())
+            .Given(Request.Create().WithPath("/models/gemini-3.5-flash:generateContent").UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(statusCode)
                 .WithHeader("Content-Type", "application/json")
@@ -33,7 +33,7 @@ public class GoogleIntegrationTests : IntegrationTestBase
         }
 
         _server
-            .Given(Request.Create().WithPath("/v1beta/models/gemini-3.5-flash:streamGenerateContent?alt=sse").UsingPost())
+            .Given(Request.Create().WithPath("/models/gemini-3.5-flash:streamGenerateContent?alt=sse").UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(statusCode)
                 .WithHeader("Content-Type", "text/event-stream")
@@ -104,7 +104,7 @@ public class GoogleIntegrationTests : IntegrationTestBase
             "usageMetadata": { "promptTokenCount": 5, "candidatesTokenCount": 2 }
         }
         """;
-        StubRetryScenario("/v1beta/models/gemini-3.5-flash:generateContent", fail, success);
+        StubRetryScenario("/models/gemini-3.5-flash:generateContent", fail, success);
 
         var result = await _client.ChatAsync(CreateChatRequest());
 
@@ -121,7 +121,7 @@ public class GoogleIntegrationTests : IntegrationTestBase
         """;
 
         _server
-            .Given(Request.Create().WithPath("/v1beta/models/gemini-3.5-flash:embedContent").UsingPost())
+            .Given(Request.Create().WithPath("/models/gemini-3.5-flash:embedContent").UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(HttpStatusCode.OK)
                 .WithHeader("Content-Type", "application/json")

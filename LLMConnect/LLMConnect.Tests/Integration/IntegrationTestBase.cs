@@ -39,7 +39,13 @@ public abstract class IntegrationTestBase : IDisposable
             Timeout = TimeSpan.FromSeconds(5)
         };
 
-        var httpClient = new HttpClient
+        var httpClient = new HttpClient(new RetryDelegatingHandler(options.MaxRetries, options.LoggerFactory?.CreateLogger<RetryDelegatingHandler>())
+        {
+            InnerHandler = new SocketsHttpHandler
+            {
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5)
+            }
+        })
         {
             BaseAddress = new Uri(baseAddress)
         };
@@ -69,9 +75,11 @@ public abstract class IntegrationTestBase : IDisposable
     protected void StubRetryScenario(string path, string failResponse, string successResponse,
         HttpStatusCode failStatusCode = HttpStatusCode.TooManyRequests)
     {
+        var scenario = "retry_scenario_" + Guid.NewGuid().ToString("N");
+
         _server
             .Given(Request.Create().WithPath(path).UsingPost())
-            .InScenario("retry_scenario_" + Guid.NewGuid().ToString("N"))
+            .InScenario(scenario)
             .WillSetStateTo("retried")
             .RespondWith(Response.Create()
                 .WithStatusCode(failStatusCode)
@@ -80,7 +88,7 @@ public abstract class IntegrationTestBase : IDisposable
 
         _server
             .Given(Request.Create().WithPath(path).UsingPost())
-            .InScenario("retry_scenario_" + Guid.NewGuid().ToString("N"))
+            .InScenario(scenario)
             .WhenStateIs("retried")
             .RespondWith(Response.Create()
                 .WithStatusCode(HttpStatusCode.OK)

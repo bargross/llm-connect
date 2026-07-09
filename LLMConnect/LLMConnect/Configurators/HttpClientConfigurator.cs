@@ -8,7 +8,7 @@ internal static class HttpClientConfigurator
 {
     internal static HttpClient ConfigureForProvider(LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts, HttpClient client)
     {
-        var endpoint = ResolveEndpoint(endpointOpts?.Endpoint, endpointOpts?.OllamaPort, generalOpts);
+        var endpoint = ResolveEndpoint(generalOpts, endpointOpts);
 
         client.BaseAddress = new Uri(endpoint);
         client.Timeout = generalOpts.Timeout;
@@ -56,18 +56,23 @@ internal static class HttpClientConfigurator
         return client;
     }
 
-    private static string ResolveEndpoint(string? optionsEndpoint, int? ollamaPort, LLMConnectGeneralOptions options)
+    private static string ResolveEndpoint(LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts)
     {
-        if (!string.IsNullOrWhiteSpace(optionsEndpoint))
-            return optionsEndpoint;
+        if (endpointOpts.HasEndpoint)
+            return endpointOpts.Endpoint;
 
-        var endpoint = EndpointRegistry.GetDefaultEndpoint(options.Provider, ollamaPort, options.LoggerFactory?.CreateLogger("EndpointRegistry"));
-
-        if (options.Provider == ProviderType.Ollama)
+        if (endpointOpts.HasBaseUrl)
         {
-            var port = ollamaPort?.ToString() ?? "11434";
-            endpoint = endpoint.Replace("{port}", port);
+            var baseUrl = endpointOpts.BaseUrl;
+            
+            // Append the default path for the provider if not already present
+            if (!baseUrl.EndsWith("/"))
+                baseUrl += "/";
+         
+            return baseUrl;
         }
+
+        var endpoint = EndpointRegistry.GetDefaultEndpoint(generalOpts.Provider, endpointOpts?.OllamaPort, generalOpts.LoggerFactory?.CreateLogger("EndpointRegistry"));
 
         return endpoint;
     }

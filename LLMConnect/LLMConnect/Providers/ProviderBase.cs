@@ -133,5 +133,33 @@ namespace LLMConnect
 
             return chatResponse;
         }
+
+        protected string GetUrl(LLMConnectEndpointOptions options, QueryType type, bool isStreaming, string? model = null, string? internalBaseUrl = null, ILogger? logger = null)
+        {
+            if (options.HasEndpoint)
+                return options.Endpoint!;
+
+            var queryParams = EndpointRegistry.GetEndpointParams(_generalOpts.Provider, type, isStreaming, logger);
+            
+            if (_generalOpts.Provider == ProviderType.Google)
+            {
+                if (string.IsNullOrEmpty(model))
+                    throw new LLMConnectException(_generalOpts.Provider?.ToString() ?? "ProviderBase", "Model must be specified for Google provider.");
+                
+                queryParams = queryParams.Replace("{model}", model);
+            } 
+                
+            if (isStreaming)
+            {
+                if (options.HasBaseUrl && isStreaming)
+                    return $"{options.BaseUrl!}{queryParams}";
+
+                return $"{internalBaseUrl}{queryParams}";
+            }
+
+            return queryParams;
+
+            throw new LLMConnectException(_generalOpts.Provider?.ToString() ?? "ProviderBase", "No valid endpoint or base URL provided.");
+        }
     }
 }

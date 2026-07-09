@@ -10,12 +10,12 @@ namespace LLMConnect.Tests.Integration;
 
 public class AnthropicIntegrationTests : IntegrationTestBase
 {
-    public AnthropicIntegrationTests() : base(ProviderType.Anthropic, "/v1/messages") { }
+    public AnthropicIntegrationTests() : base(ProviderType.Anthropic, "messages") { }
 
     // ---------- Stubs ----------
     private void StubChat(string responseJson, HttpStatusCode statusCode = HttpStatusCode.OK)
         => _server
-            .Given(Request.Create().WithPath("/v1/messages").UsingPost())
+            .Given(Request.Create().WithPath("/messages").UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(statusCode)
                 .WithHeader("Content-Type", "application/json")
@@ -35,7 +35,7 @@ public class AnthropicIntegrationTests : IntegrationTestBase
         sb.AppendLine();
 
         _server
-            .Given(Request.Create().WithPath("/v1/messages").UsingPost())
+            .Given(Request.Create().WithPath("/messages").UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(statusCode)
                 .WithHeader("Content-Type", "text/event-stream")
@@ -56,6 +56,7 @@ public class AnthropicIntegrationTests : IntegrationTestBase
             "usage": { "input_tokens": 10, "output_tokens": 5 }
         }
         """;
+
         StubChat(json);
 
         var result = await _client.ChatAsync(CreateChatRequest());
@@ -74,6 +75,7 @@ public class AnthropicIntegrationTests : IntegrationTestBase
             @"{""delta"":{""text"":""Hello""}}",
             @"{""delta"":{""text"":"" from Anthropic!""}}"
         };
+
         StubStream(chunks);
 
         var result = await _client.StreamAsync(CreateChatRequest()).ToListAsync();
@@ -88,9 +90,8 @@ public class AnthropicIntegrationTests : IntegrationTestBase
     {
         StubChat(@"{""error"":{""message"":""Invalid API key""}}", HttpStatusCode.Unauthorized);
 
-        Func<Task> act = async () => await _client.ChatAsync(CreateChatRequest());
+        var act = async () => await _client.ChatAsync(CreateChatRequest());
 
-        //var logEntries = _server.LogEntries;
 
         var ex = await act.Should().ThrowAsync<LLMConnectException>();
 
@@ -108,7 +109,8 @@ public class AnthropicIntegrationTests : IntegrationTestBase
             "usage": { "input_tokens": 5, "output_tokens": 2 }
         }
         """;
-        StubRetryScenario("/v1/messages", fail, success);
+
+        StubRetryScenario("/messages", fail, success);
 
         var result = await _client.ChatAsync(CreateChatRequest());
 

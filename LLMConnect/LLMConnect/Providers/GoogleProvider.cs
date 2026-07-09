@@ -22,8 +22,7 @@ internal class GoogleProvider: ProviderBase<GoogleProvider>, ILLMProvider
         _chatRequestValidator.Validate(request, _logger);
 
         var model = request.Model ?? _generalOpts.InternalComputedDefaultModel(request.Model);
-        var url = EndpointRegistry.GetEndpointParams(_generalOpts.Provider, QueryType.Chat, false)
-            .Replace("{model}", model);
+        var url = GetUrl(_endpointOpts, QueryType.Chat, false, model, _httpClient.BaseAddress?.ToString(), _logger);
 
         var googleRequest = request.ToGoogleRequest();
         var json = JsonSerializer.Serialize(googleRequest, DefaultJsonSerializerOptions);
@@ -51,18 +50,16 @@ internal class GoogleProvider: ProviderBase<GoogleProvider>, ILLMProvider
 
         // google streaming endpoint is different from the normal endpoint, so we need to handle it separately
         var queryParams = EndpointRegistry.GetEndpointParams(_generalOpts.Provider, QueryType.Chat, true, _logger);
+        var url = GetUrl(_endpointOpts, QueryType.Chat, true, model, _httpClient.BaseAddress?.ToString(), _logger);
 
-        var endpoint = _endpointOpts.HasEndpoint ? _endpointOpts.Endpoint 
-            : $"{_httpClient.BaseAddress}{queryParams.Replace("{model}", model)}";
-
-        if (!endpoint.Contains("alt=sse"))
-            endpoint += (endpoint.Contains('?') ? "&" : "?") + "alt=sse";
+        if (!url.Contains("alt=sse"))
+            url += (url.Contains('?') ? "&" : "?") + "alt=sse";
 
         var googleRequest = request.ToGoogleRequest();
 
         var json = JsonSerializer.Serialize(googleRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using var messageReq = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        using var messageReq = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = content
         };
@@ -90,7 +87,7 @@ internal class GoogleProvider: ProviderBase<GoogleProvider>, ILLMProvider
         var json = JsonSerializer.Serialize(googleRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var url = EndpointRegistry.GetEndpointParams(_generalOpts.Provider, QueryType.Embeddings, false, _logger).Replace("{model}", model);
+        var url = GetUrl(_endpointOpts, QueryType.Embeddings, false, model, _httpClient.BaseAddress?.ToString(), _logger);
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)

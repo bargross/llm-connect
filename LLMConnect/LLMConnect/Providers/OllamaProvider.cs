@@ -26,8 +26,8 @@ internal class OllamaProvider: ProviderBase<OllamaProvider>, ILLMProvider
 
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var queryParams = EndpointRegistry.GetEndpointParams(_generalOpts.Provider, QueryType.Chat, false, _logger);
-        var response = await _httpClient.PostAsync(queryParams, content, cancellationToken);
+        var url = GetUrl(_endpointOpts, QueryType.Chat, false, null, _httpClient.BaseAddress?.ToString(), _logger);
+        var response = await _httpClient.PostAsync(url, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
             await LogAndThrow(_generalOpts.Provider, response, cancellationToken);
@@ -49,8 +49,7 @@ internal class OllamaProvider: ProviderBase<OllamaProvider>, ILLMProvider
 
         ollamaRequest.Stream = true;
 
-        var queryParams = EndpointRegistry.GetEndpointParams(_generalOpts.Provider, QueryType.Chat, true, _logger);
-        var url = $"{_httpClient.BaseAddress}{queryParams}";
+        var url = GetUrl(_endpointOpts, QueryType.Chat, true, null, _httpClient.BaseAddress?.ToString(), _logger);
 
         var json = JsonSerializer.Serialize(ollamaRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -79,7 +78,7 @@ internal class OllamaProvider: ProviderBase<OllamaProvider>, ILLMProvider
         var json = JsonSerializer.Serialize(ollamaRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var url = EndpointRegistry.GetEndpointParams(_generalOpts.Provider, QueryType.Embeddings, false, _logger);
+        var url = GetUrl(_endpointOpts, QueryType.Embeddings, false, null, _httpClient.BaseAddress?.ToString(), _logger);
         var response = await _httpClient.PostAsync(url, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
