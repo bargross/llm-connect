@@ -140,26 +140,16 @@ namespace LLMConnect
                 return options.Endpoint!;
 
             var queryParams = EndpointRegistry.GetEndpointParams(_generalOpts.Provider, type, isStreaming, logger);
-            
+
             if (_generalOpts.Provider == ProviderType.Google)
             {
-                if (string.IsNullOrEmpty(model))
+                if (string.IsNullOrWhiteSpace(model))
                     throw new LLMConnectException(_generalOpts.Provider?.ToString() ?? "ProviderBase", "Model must be specified for Google provider.");
-                
-                queryParams = queryParams.Replace("{model}", model);
-            } 
-                
-            if (isStreaming)
-            {
-                if (options.HasBaseUrl && isStreaming)
-                    return $"{options.BaseUrl!}{queryParams}";
 
-                return $"{internalBaseUrl}{queryParams}";
+                queryParams = queryParams.Replace("{model}", model);
             }
 
-            return queryParams;
-
-            throw new LLMConnectException(_generalOpts.Provider?.ToString() ?? "ProviderBase", "No valid endpoint or base URL provided.");
+            return isStreaming ? $"{internalBaseUrl}{queryParams}" : queryParams;
         }
     }
 }

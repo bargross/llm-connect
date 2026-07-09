@@ -11,12 +11,12 @@ namespace LLMConnect.Tests.Integration;
 
 public class OpenAIIntegrationTests : IntegrationTestBase
 {
-    public OpenAIIntegrationTests() : base(ProviderType.OpenAI, "/v1/chat/completions") { }
+    public OpenAIIntegrationTests() : base(ProviderType.OpenAI, "/chat/completions") { }
 
     // ---------- Stubs ----------
     private void StubChat(string responseJson, HttpStatusCode statusCode = HttpStatusCode.OK)
         => _server
-            .Given(Request.Create().WithPath("/v1/chat/completions").UsingPost())
+            .Given(Request.Create().WithPath("/chat/completions").UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(statusCode)
                 .WithHeader("Content-Type", "application/json")
@@ -34,7 +34,7 @@ public class OpenAIIntegrationTests : IntegrationTestBase
         sb.AppendLine();
 
         _server
-            .Given(Request.Create().WithPath("/v1/chat/completions").UsingPost())
+            .Given(Request.Create().WithPath("/chat/completions").UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(statusCode)
                 .WithHeader("Content-Type", "text/event-stream")
@@ -43,7 +43,7 @@ public class OpenAIIntegrationTests : IntegrationTestBase
 
     private void StubEmbeddings(string responseJson, HttpStatusCode statusCode = HttpStatusCode.OK)
         => _server
-            .Given(Request.Create().WithPath("/v1/embeddings").UsingPost())
+            .Given(Request.Create().WithPath("/embeddings").UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(statusCode)
                 .WithHeader("Content-Type", "application/json")
@@ -82,6 +82,7 @@ public class OpenAIIntegrationTests : IntegrationTestBase
             @"{""choices"":[{""delta"":{""content"":""Hello""}}]}",
             @"{""choices"":[{""delta"":{""content"":"" world""}}]}"
         };
+
         StubStream(chunks);
 
         var result = await _client.StreamAsync(CreateChatRequest()).ToListAsync();
@@ -96,7 +97,7 @@ public class OpenAIIntegrationTests : IntegrationTestBase
     {
         StubChat(@"{""error"":{""message"":""Invalid API key""}}", HttpStatusCode.Unauthorized);
 
-        Func<Task> act = async () => await _client.ChatAsync(CreateChatRequest());
+        var act = async () => await _client.ChatAsync(CreateChatRequest());
 
         var ex = await act.Should().ThrowAsync<LLMConnectException>();
         ex.Which.Provider.Should().Be("OpenAI");
@@ -114,7 +115,7 @@ public class OpenAIIntegrationTests : IntegrationTestBase
         }
         """;
 
-        StubRetryScenario("/v1/chat/completions", fail, success);
+        StubRetryScenario("/chat/completions", fail, success);
 
         var result = await _client.ChatAsync(CreateChatRequest());
 

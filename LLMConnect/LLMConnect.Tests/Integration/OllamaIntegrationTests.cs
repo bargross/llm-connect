@@ -38,7 +38,7 @@ public class OllamaIntegrationTests : IntegrationTestBase
 
     private void StubEmbeddings(string responseJson, HttpStatusCode statusCode = HttpStatusCode.OK)
         => _server
-            .Given(Request.Create().WithPath("/api/embeddings").UsingPost())
+            .Given(Request.Create().WithPath("/api/embed").UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(statusCode)
                 .WithHeader("Content-Type", "application/json")
@@ -55,8 +55,8 @@ public class OllamaIntegrationTests : IntegrationTestBase
             "message": { "role": "assistant", "content": "Hello from Ollama!" },
             "done": true,
             "done_reason": "stop",
-            "eval_count": 10,
-            "prompt_eval_count": 5
+            "eval_count": 5,
+            "prompt_eval_count": 10
         }
         """;
         StubChat(json);
@@ -129,22 +129,10 @@ public class OllamaIntegrationTests : IntegrationTestBase
             "embedding": [1.0, 2.0, 3.0]
         }
         """;
+
         StubEmbeddings(json);
 
         var result = await _client.GetEmbeddingAsync(CreateEmbeddingRequest());
-
-        var logEntries = _server.LogEntries;
-
-        // Get the first (or last) request
-        var request = logEntries.FirstOrDefault();
-        if (request != null)
-        {
-            var fullUrl = request.RequestMessage.Url;         // e.g., "http://localhost:5000/v1beta/models/gemini-3.5-flash:generateContent"
-            var path = request.RequestMessage.AbsolutePath;   // e.g., "/v1beta/models/gemini-3.5-flash:generateContent"
-            var query = request.RequestMessage.Query;         // e.g., "?alt=sse" or empty
-
-            Console.WriteLine($"Requested URL: {fullUrl}");
-        }
 
         result.Should().NotBeNull();
         result.Embedding.Should().BeEquivalentTo(new float[] { 1.0f, 2.0f, 3.0f });

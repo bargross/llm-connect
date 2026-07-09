@@ -50,9 +50,10 @@ internal static class EndpointRegistry
     /// Returns the default endpoint (base URL + API version) with a trailing slash.
     /// For Ollama, the {port} placeholder is replaced with the provided port.
     /// </summary>
-    public static string GetDefaultEndpoint(ProviderType? provider, int? port = 11434, ILogger? logger = null)
+    public static string GetDefaultEndpoint(ProviderType? provider, int? port = null, ILogger? logger = null)
     {
         if (provider == null) throw new ArgumentNullException(nameof(provider));
+        if (port == null) port = 11434;
 
         if (!_domains.TryGetValue(provider.Value, out var domain))
         {

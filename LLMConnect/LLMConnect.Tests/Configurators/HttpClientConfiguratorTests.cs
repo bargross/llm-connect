@@ -49,6 +49,7 @@ public class HttpClientConfiguratorTests
             LoggerFactory = _loggerFactoryMock.Object,
             Timeout = TimeSpan.FromSeconds(30)
         };
+
         var endpoint = new LLMConnectEndpointOptions();
         var client = new HttpClient();
 

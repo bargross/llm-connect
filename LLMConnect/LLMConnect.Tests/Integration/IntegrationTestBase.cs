@@ -33,7 +33,7 @@ public abstract class IntegrationTestBase : IDisposable
         {
             Provider = provider,
             ApiKey = requiresApiKey ? "test-key" : null,
-            Endpoint = baseAddress,
+            BaseUrl = baseAddress,
             LoggerFactory = _loggerFactory,
             MaxRetries = 2,
             Timeout = TimeSpan.FromSeconds(5)

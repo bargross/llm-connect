@@ -33,7 +33,7 @@ public class GoogleIntegrationTests : IntegrationTestBase
         }
 
         _server
-            .Given(Request.Create().WithPath("/models/gemini-3.5-flash:streamGenerateContent?alt=sse").UsingPost())
+            .Given(Request.Create().WithPath("/models/gemini-3.5-flash:streamGenerateContent").WithParam("alt", "sse").UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(statusCode)
                 .WithHeader("Content-Type", "text/event-stream")
