@@ -1,7 +1,6 @@
 ﻿using FluentAssertions;
 using LLMConnect.Models;
 using LLMConnect.Settings;
-using Xunit;
 
 namespace LLMConnect.Tests.MappingExtensions;
 
@@ -150,6 +149,7 @@ public class LLMConnectClientOptionsExtensionsTests
         // Assert
         result.Should().NotBeNull();
         result.Endpoint.Should().BeNull();
+        result.BaseUrl.Should().BeNull();
         result.OllamaPort.Should().BeNull();
         result.ChatResponseDeserializer.Should().BeNull();
         result.EmbeddingResponseDeserializer.Should().BeNull();
@@ -171,6 +171,7 @@ public class LLMConnectClientOptionsExtensionsTests
         var original = new LLMConnectClientOptions
         {
             Endpoint = "https://custom.endpoint",
+            BaseUrl = "https://custom.baseurl",
             OllamaPort = 11435,
             ChatResponseDeserializer = chatDeserializer,
             EmbeddingResponseDeserializer = embedDeserializer,
@@ -184,6 +185,7 @@ public class LLMConnectClientOptionsExtensionsTests
 
         // Assert
         result.Endpoint.Should().Be(original.Endpoint);
+        result.BaseUrl.Should().Be(original.BaseUrl);
         result.OllamaPort.Should().Be(original.OllamaPort);
         result.ChatResponseDeserializer.Should().BeSameAs(original.ChatResponseDeserializer);
         result.EmbeddingResponseDeserializer.Should().BeSameAs(original.EmbeddingResponseDeserializer);
