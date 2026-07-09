@@ -1,5 +1,6 @@
 ﻿using LLMConnect.Models;
 using LLMConnect.Settings;
+using Microsoft.Extensions.Logging;
 
 namespace LLMConnect.Tests.Providers;
 
@@ -21,7 +22,10 @@ internal class TestProvider : ProviderBase<TestProvider>
         CancellationToken cancellationToken)
         => base.ReadFromStreamAsync(stream, generalOpts, endpointOpts, cancellationToken);
 
-    //public List<string> GetRequestedUrls() => _;
+    public string GetUrl(LLMConnectEndpointOptions options, QueryType type, bool isStreaming, string? model = null, string? internalBaseUrl = null, ILogger? logger = null)
+    {
+        return this.GetUrl(options, type, isStreaming, model, internalBaseUrl, logger);
+    }
 
     public async Task<TResponse?> DeserializeResponseAsync<TProviderResponse, TResponse>(
         HttpResponseMessage response,

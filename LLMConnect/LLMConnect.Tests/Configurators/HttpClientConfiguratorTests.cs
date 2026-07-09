@@ -111,6 +111,66 @@ public class HttpClientConfiguratorTests
         configuredClient.BaseAddress!.ToString().Should().Be(customEndpoint);
     }
 
+    [Fact]
+    public void ConfigureForProvider_WithBaseUrlSet_UsesBaseUrlAsBaseAddress()
+    {
+        var baseUrl = "https://my-proxy.internal/v1/";
+        var endpointOptions = new LLMConnectEndpointOptions { BaseUrl = baseUrl };
+        var client = new HttpClient();
+
+        var configuredClient = HttpClientConfigurator.ConfigureForProvider(_defaultGeneralOptions, endpointOptions, client);
+
+        configuredClient.BaseAddress.Should().NotBeNull();
+        configuredClient.BaseAddress!.ToString().Should().Be(baseUrl);
+    }
+
+    [Fact]
+    public void ConfigureForProvider_WithBaseUrlMissingTrailingSlash_AppendsSlash()
+    {
+        var baseUrlWithoutSlash = "https://my-proxy.internal/v1";
+        var endpointOptions = new LLMConnectEndpointOptions { BaseUrl = baseUrlWithoutSlash };
+        var client = new HttpClient();
+
+        var configuredClient = HttpClientConfigurator.ConfigureForProvider(_defaultGeneralOptions, endpointOptions, client);
+
+        configuredClient.BaseAddress!.ToString().Should().Be("https://my-proxy.internal/v1/");
+    }
+
+    [Fact]
+    public void ConfigureForProvider_WithBothEndpointAndBaseUrlSet_EndpointTakesPrecedence()
+    {
+        var endpoint = "https://exact-override.com/full/path";
+        var baseUrl = "https://should-be-ignored.com/v1/";
+        var endpointOptions = new LLMConnectEndpointOptions { Endpoint = endpoint, BaseUrl = baseUrl };
+        var client = new HttpClient();
+
+        var configuredClient = HttpClientConfigurator.ConfigureForProvider(_defaultGeneralOptions, endpointOptions, client);
+
+        configuredClient.BaseAddress!.ToString().Should().Be(endpoint);
+    }
+
+    [Fact]
+    public void ConfigureForProvider_ForOllama_BaseUrlOverridesOllamaPort()
+    {
+        var baseUrl = "http://custom-ollama-host:9999/";
+        var endpoint = new LLMConnectEndpointOptions
+        {
+            BaseUrl = baseUrl,
+            OllamaPort = 11435 // Should be ignored
+        };
+        var general = new LLMConnectGeneralOptions
+        {
+            Provider = ProviderType.Ollama,
+            LoggerFactory = _loggerFactoryMock.Object,
+            Timeout = TimeSpan.FromSeconds(30)
+        };
+        var client = new HttpClient();
+
+        var configuredClient = HttpClientConfigurator.ConfigureForProvider(general, endpoint, client);
+
+        configuredClient.BaseAddress!.ToString().Should().Be(baseUrl);
+    }
+
     // ---------- Headers ----------
 
     [Theory]

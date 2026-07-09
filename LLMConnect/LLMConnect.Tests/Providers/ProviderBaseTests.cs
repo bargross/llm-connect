@@ -357,6 +357,102 @@ public class ProviderBaseTests
         exception.Which.Message.Should().Be("Failed to deserialize response.");
     }
 
+    // ---------- GetUrl Tests ----------
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GetUrl_WithEndpointSet_ReturnsEndpointVerbatim_IgnoringModelAndPath(bool isStreaming)
+    {
+        var endpointOpts = new LLMConnectEndpointOptions
+        {
+            Endpoint = "https://my-custom-gateway.com/custom/path"
+        };
+
+        var url = _provider.GetUrl(endpointOpts, QueryType.Chat, isStreaming, model: "gpt-5.5", internalBaseUrl: "https://api.openai.com/v1/");
+
+        url.Should().Be("https://my-custom-gateway.com/custom/path");
+    }
+
+    [Fact]
+    public void GetUrl_WithoutEndpointOrBaseUrl_NonStreaming_ReturnsRelativePath()
+    {
+        var endpointOpts = new LLMConnectEndpointOptions();
+
+        var url = _provider.GetUrl(endpointOpts, QueryType.Chat, isStreaming: false);
+
+        url.Should().Be("chat/completions");
+    }
+
+    [Fact]
+    public void GetUrl_WithoutEndpointOrBaseUrl_Streaming_ReturnsAbsoluteUrl_UsingInternalBaseUrl()
+    {
+        var endpointOpts = new LLMConnectEndpointOptions();
+
+        var url = _provider.GetUrl(endpointOpts, QueryType.Chat, isStreaming: true, internalBaseUrl: "https://api.openai.com/v1/");
+
+        url.Should().Be("https://api.openai.com/v1/chat/completions");
+    }
+
+    [Fact]
+    public void GetUrl_WithBaseUrlMissingTrailingSlash_Streaming_StillProducesWellFormedUrl()
+    {
+        // internalBaseUrl represents what HttpClientConfigurator would have already
+        // normalized onto HttpClient.BaseAddress (always ends with '/'). GetUrl must
+        // trust that value rather than re-reading the raw, un-normalized BaseUrl option.
+        var endpointOpts = new LLMConnectEndpointOptions { BaseUrl = "https://api.openai.com/v1" };
+
+        var url = _provider.GetUrl(endpointOpts, QueryType.Chat, isStreaming: true, internalBaseUrl: "https://api.openai.com/v1/");
+
+        url.Should().Be("https://api.openai.com/v1/chat/completions");
+        url.Should().NotContain("v1chat");
+    }
+
+    [Fact]
+    public void GetUrl_ForGoogleProvider_WithoutModel_ThrowsLLMConnectException()
+    {
+        var googleOptions = new LLMConnectGeneralOptions
+        {
+            Provider = ProviderType.Google,
+            ApiKey = "test-key",
+            LoggerFactory = _loggerFactoryMock.Object
+        };
+        var googleProvider = new TestProvider(googleOptions);
+        var endpointOpts = new LLMConnectEndpointOptions();
+
+        Action act = () => googleProvider.GetUrl(endpointOpts, QueryType.Chat, isStreaming: false, model: null);
+
+        act.Should().Throw<LLMConnectException>()
+            .WithMessage("Model must be specified for Google provider.");
+    }
+
+    [Fact]
+    public void GetUrl_ForGoogleProvider_SubstitutesModelPlaceholder()
+    {
+        var googleOptions = new LLMConnectGeneralOptions
+        {
+            Provider = ProviderType.Google,
+            ApiKey = "test-key",
+            LoggerFactory = _loggerFactoryMock.Object
+        };
+        var googleProvider = new TestProvider(googleOptions);
+        var endpointOpts = new LLMConnectEndpointOptions();
+
+        var url = googleProvider.GetUrl(endpointOpts, QueryType.Chat, isStreaming: false, model: "gemini-3.5-flash");
+
+        url.Should().Be("models/gemini-3.5-flash:generateContent");
+    }
+
+    [Fact]
+    public void GetUrl_ForNonGoogleProvider_WithNullModel_DoesNotThrow()
+    {
+        var endpointOpts = new LLMConnectEndpointOptions();
+
+        Action act = () => _provider.GetUrl(endpointOpts, QueryType.Chat, isStreaming: false, model: null);
+
+        act.Should().NotThrow();
+    }
+
     private class CustomStreamEventReader : IStreamEventReader
     {
         private readonly Stream _stream;
