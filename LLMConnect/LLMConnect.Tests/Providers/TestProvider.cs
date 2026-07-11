@@ -15,17 +15,8 @@ internal class TestProvider : ProviderBase<TestProvider>
     public async Task LogAndThrow(ProviderType providerType, HttpResponseMessage response, CancellationToken cancellationToken)
         => await base.LogAndThrow(providerType, response, cancellationToken);
 
-    public new IAsyncEnumerable<ChatChunk> ReadFromStreamAsync(
-        Stream stream,
-        LLMConnectGeneralOptions generalOpts,
-        LLMConnectEndpointOptions endpointOpts,
-        CancellationToken cancellationToken)
-        => base.ReadFromStreamAsync(stream, generalOpts, endpointOpts, cancellationToken);
-
-    public string GetUrl(LLMConnectEndpointOptions options, QueryType type, bool isStreaming, string? model = null, string? internalBaseUrl = null, ILogger? logger = null)
-    {
-        return this.GetUrl(options, type, isStreaming, model, internalBaseUrl, logger);
-    }
+    public string GetUrl(LLMConnectEndpointOptions options, QueryType type, bool isStreaming, string? model = null, string? internalBaseUrl = null, ILogger? logger = null) => GetUrl(options, type, isStreaming, model, internalBaseUrl, logger);
+    
 
     public async Task<TResponse?> DeserializeResponseAsync<TProviderResponse, TResponse>(
         HttpResponseMessage response,
@@ -37,8 +28,6 @@ internal class TestProvider : ProviderBase<TestProvider>
         => await base.DeserializeResponseAsync(
             response,
             provider,
-            customDeserializerEvaluator,
-            jsonStringToResponse,
             toChatResponse,
             cancellationToken);
 }

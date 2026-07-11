@@ -12,7 +12,7 @@ internal static class StreamReaderFactory
 
         switch (provider)
         {
-            case ProviderType.OpenAI: return new NdjsonStreamEventReader(options);
+            case ProviderType.OpenAI or ProviderType.AzureOpenAI: return new NdjsonStreamEventReader(options);
             case ProviderType.Anthropic: return new SseStreamEventReader(options);
             case ProviderType.Google: return new SseStreamEventReader(options);
             case ProviderType.Ollama: return new NdjsonStreamEventReader(options);

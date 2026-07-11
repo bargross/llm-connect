@@ -9,7 +9,7 @@ namespace LLMConnect
         {
             switch (provider)
             {
-                case ProviderType.OpenAI: return new OpenAIChatRequestValidator();
+                case ProviderType.OpenAI or ProviderType.AzureOpenAI: return new OpenAIChatRequestValidator();
                 case ProviderType.Anthropic: return new AnthropicChatRequestValidator();
                 case ProviderType.Google: return new GoogleChatRequestValidator();
                 case ProviderType.Ollama: return new OllamaChatRequestValidator();

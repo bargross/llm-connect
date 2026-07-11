@@ -9,7 +9,7 @@ internal static class EmbeddingRequestValidatorFactory
     {
         return provider switch
         {
-            ProviderType.OpenAI => new OpenAIEmbeddingRequestValidator(),
+            ProviderType.OpenAI or ProviderType.AzureOpenAI => new OpenAIEmbeddingRequestValidator(),
             ProviderType.Anthropic => new AnthropicEmbeddingRequestValidator(),
             ProviderType.Google => new GoogleEmbeddingRequestValidator(),
             ProviderType.Ollama => new OllamaEmbeddingRequestValidator(),

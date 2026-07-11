@@ -12,7 +12,7 @@ internal static class StreamChunkParserFactory
 
         switch (provider)
         {
-            case ProviderType.OpenAI: return new OpenAIStreamChunkParser(options);
+            case ProviderType.OpenAI or ProviderType.AzureOpenAI: return new OpenAIStreamChunkParser(options);
             case ProviderType.Anthropic: return new AnthropicStreamChunkParser(options);
             case ProviderType.Google: return new GoogleStreamChunkParser(options);
             case ProviderType.Ollama: return new OllamaStreamChunkParser(options);

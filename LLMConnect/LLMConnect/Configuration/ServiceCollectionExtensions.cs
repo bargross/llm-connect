@@ -108,7 +108,7 @@ public static class ServiceCollectionExtensions
             services.AddHttpClient("LLMConnect")
                 .AddHttpMessageHandler(sp =>
                 {
-                    var options = sp.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
+                    var options = sp.GetRequiredService<IOptions<LLMConnectGeneralOptions>>().Value;
                     var logger = options.LoggerFactory?.CreateLogger("LLMConnect.Retry");
 
                     return new RetryDelegatingHandler(options.MaxRetries, logger);

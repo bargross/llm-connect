@@ -5,13 +5,15 @@ using System.Net;
 using System.Text;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
-using Xunit;
 
 namespace LLMConnect.Tests.Integration;
 
 public class OllamaIntegrationTests : IntegrationTestBase
 {
-    public OllamaIntegrationTests() : base(ProviderType.Ollama, "/api/chat", requiresApiKey: false) { }
+    public OllamaIntegrationTests()
+        : base(ProviderType.Ollama, requiresApiKey: false)
+    {
+    }
 
     // ---------- Stubs ----------
     private void StubChat(string responseJson, HttpStatusCode statusCode = HttpStatusCode.OK)

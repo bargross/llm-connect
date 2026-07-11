@@ -6,12 +6,13 @@ using System.Text.Json;
 
 namespace LLMConnect;
 
-internal class GoogleProvider: ProviderBase<GoogleProvider>, ILLMProvider
+internal class AzureOpenAIProvider : ProviderBase<AzureOpenAIProvider>, ILLMProvider
 {
     private readonly HttpClient _httpClient;
     private readonly LLMConnectEndpointOptions _endpointOpts;
 
-    public GoogleProvider(HttpClient httpClient, LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts): base(generalOpts)
+    public AzureOpenAIProvider(HttpClient httpClient, LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts)
+        : base(generalOpts)
     {
         _httpClient = httpClient;
         _endpointOpts = endpointOpts;
@@ -21,22 +22,25 @@ internal class GoogleProvider: ProviderBase<GoogleProvider>, ILLMProvider
     {
         _chatRequestValidator.Validate(request, _logger);
 
-        var model = request.Model ?? _generalOpts.InternalComputedDefaultModel(request.Model);
-        var relativePath = GetUrlRelativePath(_endpointOpts, QueryType.Chat, false, model, _logger);
+        // Azure uses the same request format as OpenAI
+        var openAiRequest = request.ToOpenAIRequest(_generalOpts.InternalComputedDefaultModel());
+        var json = JsonSerializer.Serialize(openAiRequest, DefaultJsonSerializerOptions);
 
-        var googleRequest = request.ToGoogleRequest();
-        var json = JsonSerializer.Serialize(googleRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var response = await _httpClient.PostAsync(relativePath, content, cancellationToken);
+        // Build the URL with API version as a query parameter
+        var relativePath = GetUrlRelativePath(_endpointOpts, QueryType.Chat, false, null, _logger);
+        var fullUrl = $"{relativePath}?api-version={_endpointOpts.AzureApiVersion}";
+
+        var response = await _httpClient.PostAsync(fullUrl, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
             await LogAndThrow(_generalOpts.Provider, response, cancellationToken);
 
-        return await DeserializeResponseAsync<GoogleChatResponse, ChatResponse>(
+        return await DeserializeResponseAsync<OpenAIChatResponse, ChatResponse>(
             response,
             _generalOpts.Provider,
-            googleResponse => googleResponse?.ToChatResponse(),
+            openAiResponse => openAiResponse?.ToChatResponse(),
             cancellationToken);
     }
 
@@ -44,20 +48,16 @@ internal class GoogleProvider: ProviderBase<GoogleProvider>, ILLMProvider
     {
         _chatRequestValidator.Validate(request, _logger);
 
-        var model = request.Model ?? _generalOpts.InternalComputedDefaultModel(request.Model);
+        var openAiRequest = request.ToOpenAIRequest(_generalOpts.InternalComputedDefaultModel(request.Model));
+        openAiRequest.Stream = true;
 
-        // google streaming endpoint is different from the normal endpoint, so we need to handle it separately
-        var queryParams = EndpointRegistry.GetEndpointParams(_generalOpts.Provider.Value, QueryType.Chat, true, model, _logger);
-        var relativePath = GetUrlRelativePath(_endpointOpts, QueryType.Chat, true, model, _logger);
+        var relativePath = GetUrlRelativePath(_endpointOpts, QueryType.Chat, true, null, _logger);
+        var fullUrl = $"{relativePath}?api-version={_endpointOpts.AzureApiVersion}";
 
-        if (!relativePath.Contains("alt=sse"))
-            relativePath += (relativePath.Contains('?') ? "&" : "?") + "alt=sse";
-
-        var googleRequest = request.ToGoogleRequest();
-
-        var json = JsonSerializer.Serialize(googleRequest, DefaultJsonSerializerOptions);
+        var json = JsonSerializer.Serialize(openAiRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using var messageReq = new HttpRequestMessage(HttpMethod.Post, relativePath)
+
+        using var messageReq = new HttpRequestMessage(HttpMethod.Post, fullUrl)
         {
             Content = content
         };
@@ -84,22 +84,23 @@ internal class GoogleProvider: ProviderBase<GoogleProvider>, ILLMProvider
     {
         _embeddingRequestValidator?.Validate(request, _logger);
 
-        var model = _generalOpts.InternalComputedDefaultModel(request.Model);
-        var googleRequest = request.ToGoogleRequest(model);
+        var openAiRequest = request.ToOpenAIRequest(_generalOpts.InternalComputedDefaultModel(request.Model));
+        var json = JsonSerializer.Serialize(openAiRequest, DefaultJsonSerializerOptions);
 
-        var json = JsonSerializer.Serialize(googleRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var relativePath = GetUrlRelativePath(_endpointOpts, QueryType.Embeddings, false, model, _logger);
-        var response = await _httpClient.PostAsync(relativePath, content, cancellationToken);
+        var relativePath = GetUrlRelativePath(_endpointOpts, QueryType.Embeddings, false, null, _logger);
+        var fullUrl = $"{relativePath}?api-version={_endpointOpts.AzureApiVersion}";
+
+        var response = await _httpClient.PostAsync(fullUrl, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
             await LogAndThrow(_generalOpts.Provider, response, cancellationToken);
 
-        return await DeserializeResponseAsync<GoogleEmbeddingResponse, EmbeddingResponse>(
+        return await DeserializeResponseAsync<OpenAIEmbeddingResponse, EmbeddingResponse>(
             response,
             _generalOpts.Provider,
-            googleResponse => googleResponse?.ToEmbeddingResponse(),
+            openAiResponse => openAiResponse?.ToEmbeddingResponse(),
             cancellationToken);
     }
 }

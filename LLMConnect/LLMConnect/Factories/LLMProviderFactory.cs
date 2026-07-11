@@ -43,6 +43,7 @@ internal class LLMProviderFactory
             ProviderType.Anthropic => (configuredClient, new AnthropicProvider(configuredClient, _generalOpts, _endpointOpts)),
             ProviderType.Google => (configuredClient, new GoogleProvider(configuredClient, _generalOpts, _endpointOpts)),
             ProviderType.Ollama => (configuredClient, new OllamaProvider(configuredClient, _generalOpts, _endpointOpts)),
+            ProviderType.AzureOpenAI => (configuredClient, new AzureOpenAIProvider(configuredClient, _generalOpts, _endpointOpts)),
             _ => throw new NotSupportedException($"Provider '{_generalOpts.Provider}' is not supported.")
         };
     }

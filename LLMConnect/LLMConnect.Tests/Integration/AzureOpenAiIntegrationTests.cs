@@ -8,14 +8,30 @@ using WireMock.ResponseBuilders;
 
 namespace LLMConnect.Tests.Integration;
 
-public class OpenAIIntegrationTests : IntegrationTestBase
+public class AzureOpenAIIntegrationTests : IntegrationTestBase
 {
-    public OpenAIIntegrationTests() : base(ProviderType.OpenAI) { }
+    private const string ResourceName = "test-resource";
+    private const string DeploymentName = "test-deployment";
+    private const string ApiVersion = "2024-02-15-preview";
+    private const string DeploymentPath = $"/openai/deployments/{DeploymentName}/chat/completions";
+    private const string EmbeddingsPath = $"/openai/deployments/{DeploymentName}/embeddings";
+
+    public AzureOpenAIIntegrationTests()
+        : base(
+            ProviderType.AzureOpenAI,
+            CreateAzureEndpointOptions(ResourceName, DeploymentName, ApiVersion),
+            requiresApiKey: true)
+    {
+    }
 
     // ---------- Stubs ----------
+
     private void StubChat(string responseJson, HttpStatusCode statusCode = HttpStatusCode.OK)
         => _server
-            .Given(Request.Create().WithPath("/v1/chat/completions").UsingPost())
+            .Given(Request.Create()
+                .WithPath(DeploymentPath)
+                .WithParam("api-version", ApiVersion)
+                .UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(statusCode)
                 .WithHeader("Content-Type", "application/json")
@@ -33,7 +49,10 @@ public class OpenAIIntegrationTests : IntegrationTestBase
         sb.AppendLine();
 
         _server
-            .Given(Request.Create().WithPath("/v1/chat/completions").UsingPost())
+            .Given(Request.Create()
+                .WithPath(DeploymentPath)
+                .WithParam("api-version", ApiVersion)
+                .UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(statusCode)
                 .WithHeader("Content-Type", "text/event-stream")
@@ -42,7 +61,10 @@ public class OpenAIIntegrationTests : IntegrationTestBase
 
     private void StubEmbeddings(string responseJson, HttpStatusCode statusCode = HttpStatusCode.OK)
         => _server
-            .Given(Request.Create().WithPath("/v1/embeddings").UsingPost())
+            .Given(Request.Create()
+                .WithPath(EmbeddingsPath)
+                .WithParam("api-version", ApiVersion)
+                .UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(statusCode)
                 .WithHeader("Content-Type", "application/json")
@@ -56,10 +78,15 @@ public class OpenAIIntegrationTests : IntegrationTestBase
         var json = """
         {
             "id": "chatcmpl-123",
-            "model": "gpt-3.5-turbo",
-            "created": 1677651234,
-            "choices": [{ "message": { "content": "Hello from OpenAI!" }, "finish_reason": "stop" }],
-            "usage": { "prompt_tokens": 10, "completion_tokens": 5 }
+            "model": "gpt-4",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": { "role": "assistant", "content": "Hello from Azure OpenAI!" },
+                    "finish_reason": "stop"
+                }
+            ],
+            "usage": { "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15 }
         }
         """;
         StubChat(json);
@@ -67,7 +94,7 @@ public class OpenAIIntegrationTests : IntegrationTestBase
         var result = await _client.ChatAsync(CreateChatRequest());
 
         result.Should().NotBeNull();
-        result.Content.Should().Be("Hello from OpenAI!");
+        result.Content.Should().Be("Hello from Azure OpenAI!");
         result.FinishReason.Should().Be("stop");
         result.Usage.InputTokens.Should().Be(10);
         result.Usage.OutputTokens.Should().Be(5);
@@ -99,7 +126,7 @@ public class OpenAIIntegrationTests : IntegrationTestBase
         var act = async () => await _client.ChatAsync(CreateChatRequest());
 
         var ex = await act.Should().ThrowAsync<LLMConnectException>();
-        ex.Which.Provider.Should().Be("OpenAI");
+        ex.Which.Provider.Should().Be("AzureOpenAI");
         ex.Which.Message.Should().Be("Invalid API key");
     }
 
@@ -114,7 +141,7 @@ public class OpenAIIntegrationTests : IntegrationTestBase
         }
         """;
 
-        StubRetryScenario("/v1/chat/completions", fail, success);
+        StubRetryScenario(DeploymentPath, fail, success);
 
         var result = await _client.ChatAsync(CreateChatRequest());
 
@@ -127,7 +154,7 @@ public class OpenAIIntegrationTests : IntegrationTestBase
         var json = """
         {
             "data": [{ "embedding": [0.1, 0.2, 0.3] }],
-            "model": "text-embedding-3-small",
+            "model": "text-embedding-ada-002",
             "usage": { "prompt_tokens": 10, "total_tokens": 10 }
         }
         """;
@@ -137,8 +164,20 @@ public class OpenAIIntegrationTests : IntegrationTestBase
 
         result.Should().NotBeNull();
         result.Embedding.Should().BeEquivalentTo(new float[] { 0.1f, 0.2f, 0.3f });
-        result.Model.Should().Be("text-embedding-3-small");
+        result.Model.Should().Be("text-embedding-ada-002");
         result.Usage.Should().NotBeNull();
         result.Usage.InputTokens.Should().Be(10);
+    }
+
+    [Fact]
+    public async Task EmbeddingsAsync_Error_ThrowsLLMConnectException()
+    {
+        StubEmbeddings(@"{""error"":{""message"":""Invalid input""}}", HttpStatusCode.BadRequest);
+
+        var act = async () => await _client.GetEmbeddingAsync(CreateEmbeddingRequest());
+
+        var ex = await act.Should().ThrowAsync<LLMConnectException>();
+        ex.Which.Provider.Should().Be("AzureOpenAI");
+        ex.Which.Message.Should().Be("Invalid input");
     }
 }

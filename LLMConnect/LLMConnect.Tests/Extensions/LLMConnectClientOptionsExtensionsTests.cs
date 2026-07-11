@@ -1,106 +1,234 @@
 ﻿using FluentAssertions;
 using LLMConnect.Models;
 using LLMConnect.Settings;
+using Microsoft.Extensions.Logging;
+using Moq;
 
-namespace LLMConnect.Tests.MappingExtensions;
+namespace LLMConnect.Tests.Extensions;
 
 public class LLMConnectClientOptionsExtensionsTests
 {
-    // ---------- InternalComputedDefaultModel ----------
-    //ProviderType.Ollama => "qwen2.5:7b-instruct",
-    //                ProviderType.Google => "gemini-3.5-flash",
-    //                ProviderType.Anthropic => "claude-sonnet-5",
-    //                ProviderType.OpenAI => "gpt-5.5",
-    [Theory]
-    [InlineData(ProviderType.OpenAI, "gpt-5.5")]
-    [InlineData(ProviderType.Anthropic, "claude-sonnet-5")]
-    [InlineData(ProviderType.Google, "gemini-3.5-flash")]
-    [InlineData(ProviderType.Ollama, "qwen2.5:7b-instruct")]
-    public void InternalComputedDefaultModel_WhenNoModelOrDefault_ReturnsProviderDefault(ProviderType provider, string expectedDefault)
+    private readonly Mock<ILoggerFactory> _loggerFactoryMock;
+
+    public LLMConnectClientOptionsExtensionsTests()
     {
-        // Arrange
-        var options = new LLMConnectGeneralOptions { Provider = provider };
-
-        // Act
-        var result = options.InternalComputedDefaultModel();
-
-        // Assert
-        result.Should().Be(expectedDefault);
+        _loggerFactoryMock = new Mock<ILoggerFactory>();
     }
 
+    // ---------- InternalComputedDefaultModel ----------
+
     [Fact]
-    public void InternalComputedDefaultModel_WhenModelProvided_ReturnsModel()
+    public void InternalComputedDefaultModel_WhenModelProvided_ReturnsProvidedModel()
     {
         // Arrange
-        var options = new LLMConnectGeneralOptions { Provider = ProviderType.OpenAI };
-        var providedModel = "custom-model";
+        var options = new LLMConnectGeneralOptions
+        {
+            Provider = ProviderType.OpenAI,
+            DefaultModel = "gpt-4"
+        };
+        var providedModel = "gpt-4-turbo";
 
         // Act
         var result = options.InternalComputedDefaultModel(providedModel);
 
         // Assert
-        result.Should().Be(providedModel);
+        result.Should().Be("gpt-4-turbo");
     }
 
     [Fact]
-    public void InternalComputedDefaultModel_WhenDefaultModelSet_ReturnsDefaultModel()
+    public void InternalComputedDefaultModel_WhenModelNotProvided_ReturnsDefaultModelFromOptions()
     {
         // Arrange
-        var defaultModel = "my-default-model";
         var options = new LLMConnectGeneralOptions
         {
             Provider = ProviderType.OpenAI,
-            DefaultModel = defaultModel
+            DefaultModel = "gpt-4"
         };
 
         // Act
         var result = options.InternalComputedDefaultModel();
 
         // Assert
-        result.Should().Be(defaultModel);
+        result.Should().Be("gpt-4");
     }
 
     [Fact]
-    public void InternalComputedDefaultModel_WhenModelAndDefaultProvided_ModelTakesPrecedence()
+    public void InternalComputedDefaultModel_WhenModelAndDefaultModelNotProvided_ReturnsProviderDefault()
     {
         // Arrange
-        var model = "explicit-model";
-        var defaultModel = "default-model";
         var options = new LLMConnectGeneralOptions
         {
-            Provider = ProviderType.OpenAI,
-            DefaultModel = defaultModel
+            Provider = ProviderType.OpenAI
         };
 
         // Act
-        var result = options.InternalComputedDefaultModel(model);
+        var result = options.InternalComputedDefaultModel();
 
         // Assert
-        result.Should().Be(model);
+        result.Should().Be("gpt-5.5");
+    }
+
+    [Theory]
+    [InlineData(ProviderType.OpenAI, "gpt-5.5")]
+    [InlineData(ProviderType.Anthropic, "claude-sonnet-5")]
+    [InlineData(ProviderType.Google, "gemini-3.5-flash")]
+    [InlineData(ProviderType.Ollama, "qwen2.5:7b-instruct")]
+    [InlineData(ProviderType.AzureOpenAI, "gpt-4")]
+    public void InternalComputedDefaultModel_ReturnsCorrectProviderDefault(ProviderType provider, string expected)
+    {
+        // Arrange
+        var options = new LLMConnectGeneralOptions
+        {
+            Provider = provider
+        };
+
+        // Act
+        var result = options.InternalComputedDefaultModel();
+
+        // Assert
+        result.Should().Be(expected);
     }
 
     [Fact]
-    public void InternalComputedDefaultModel_ForUnsupportedProvider_ThrowsNotSupportedException()
+    public void InternalComputedDefaultModel_WhenProviderNotSupported_ThrowsNotSupportedException()
     {
         // Arrange
         var unsupportedProvider = (ProviderType)999;
-        var options = new LLMConnectGeneralOptions { Provider = unsupportedProvider };
+        var options = new LLMConnectGeneralOptions
+        {
+            Provider = unsupportedProvider
+        };
 
         // Act
         Action act = () => options.InternalComputedDefaultModel();
 
         // Assert
         act.Should().Throw<NotSupportedException>()
-            .WithMessage($"Provider '{unsupportedProvider}' is not supported.*");
+            .WithMessage($"Provider '{unsupportedProvider}' is not supported.");
+    }
+
+    [Fact]
+    public void InternalComputedDefaultModel_Precedence_ModelOverridesDefaultModel()
+    {
+        // Arrange
+        var options = new LLMConnectGeneralOptions
+        {
+            Provider = ProviderType.OpenAI,
+            DefaultModel = "gpt-4"
+        };
+        var providedModel = "gpt-4-turbo";
+
+        // Act
+        var result = options.InternalComputedDefaultModel(providedModel);
+
+        // Assert
+        result.Should().Be("gpt-4-turbo");
+    }
+
+    [Fact]
+    public void InternalComputedDefaultModel_Precedence_DefaultModelOverridesProviderDefault()
+    {
+        // Arrange
+        var options = new LLMConnectGeneralOptions
+        {
+            Provider = ProviderType.OpenAI,
+            DefaultModel = "gpt-4"
+        };
+
+        // Act
+        var result = options.InternalComputedDefaultModel();
+
+        // Assert
+        result.Should().Be("gpt-4");
+    }
+
+    [Fact]
+    public void InternalComputedDefaultModel_WithEmptyStringModel_IgnoresEmptyString()
+    {
+        // Arrange
+        var options = new LLMConnectGeneralOptions
+        {
+            Provider = ProviderType.OpenAI,
+            DefaultModel = "gpt-4"
+        };
+
+        // Act
+        var result = options.InternalComputedDefaultModel("");
+
+        // Assert
+        result.Should().Be("gpt-4");
+    }
+
+    [Fact]
+    public void InternalComputedDefaultModel_WithWhitespaceModel_IgnoresWhitespace()
+    {
+        // Arrange
+        var options = new LLMConnectGeneralOptions
+        {
+            Provider = ProviderType.OpenAI,
+            DefaultModel = "gpt-4"
+        };
+
+        // Act
+        var result = options.InternalComputedDefaultModel("   ");
+
+        // Assert
+        result.Should().Be("gpt-4");
+    }
+
+    [Fact]
+    public void InternalComputedDefaultModel_ForAzureOpenAI_ReturnsAzureDefault()
+    {
+        // Arrange
+        var options = new LLMConnectGeneralOptions
+        {
+            Provider = ProviderType.AzureOpenAI
+        };
+
+        // Act
+        var result = options.InternalComputedDefaultModel();
+
+        // Assert
+        result.Should().Be("gpt-4");
     }
 
     // ---------- ToGeneralOptions ----------
 
     [Fact]
-    public void ToGeneralOptions_WhenOptionsIsNull_ReturnsDefaultGeneralOptions()
+    public void ToGeneralOptions_MapsAllPropertiesCorrectly()
     {
+        // Arrange
+        var legacyOptions = new LLMConnectClientOptions
+        {
+            Provider = ProviderType.Anthropic,
+            ApiKey = "test-api-key",
+            DefaultModel = "claude-3-5-sonnet",
+            Timeout = TimeSpan.FromSeconds(60),
+            MaxRetries = 5,
+            LoggerFactory = _loggerFactoryMock.Object
+        };
+
         // Act
-        var result = LLMConnectClientOptionsExtensions.ToGeneralOptions(null!);
+        var result = legacyOptions.ToGeneralOptions();
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Provider.Should().Be(legacyOptions.Provider);
+        result.ApiKey.Should().Be(legacyOptions.ApiKey);
+        result.DefaultModel.Should().Be(legacyOptions.DefaultModel);
+        result.Timeout.Should().Be(legacyOptions.Timeout);
+        result.MaxRetries.Should().Be(legacyOptions.MaxRetries);
+        result.LoggerFactory.Should().Be(legacyOptions.LoggerFactory);
+    }
+
+    [Fact]
+    public void ToGeneralOptions_WithNullInput_ReturnsEmptyGeneralOptions()
+    {
+        // Arrange
+        LLMConnectClientOptions? legacyOptions = null;
+
+        // Act
+        var result = legacyOptions.ToGeneralOptions();
 
         // Assert
         result.Should().NotBeNull();
@@ -113,84 +241,114 @@ public class LLMConnectClientOptionsExtensionsTests
     }
 
     [Fact]
-    public void ToGeneralOptions_WhenOptionsIsValid_MapsAllProperties()
+    public void ToGeneralOptions_WithPartialProperties_MapsWhatIsAvailable()
     {
         // Arrange
-        var original = new LLMConnectClientOptions
+        var legacyOptions = new LLMConnectClientOptions
         {
-            Provider = ProviderType.Anthropic,
-            ApiKey = "test-key",
-            DefaultModel = "claude-3",
-            Timeout = TimeSpan.FromSeconds(99),
-            MaxRetries = 5,
-            LoggerFactory = null // cannot easily create one, but it's a reference type
+            Provider = ProviderType.Google,
+            ApiKey = "google-key"
         };
 
         // Act
-        var result = original.ToGeneralOptions();
+        var result = legacyOptions.ToGeneralOptions();
 
         // Assert
-        result.Provider.Should().Be(original.Provider);
-        result.ApiKey.Should().Be(original.ApiKey);
-        result.DefaultModel.Should().Be(original.DefaultModel);
-        result.Timeout.Should().Be(original.Timeout);
-        result.MaxRetries.Should().Be(original.MaxRetries);
-        result.LoggerFactory.Should().Be(original.LoggerFactory);
+        result.Provider.Should().Be(ProviderType.Google);
+        result.ApiKey.Should().Be("google-key");
+        result.DefaultModel.Should().BeNull();
+        result.Timeout.Should().Be(TimeSpan.FromSeconds(60));
+        result.MaxRetries.Should().Be(3);
+        result.LoggerFactory.Should().BeNull();
     }
 
     // ---------- ToEndpointOptions ----------
 
     [Fact]
-    public void ToEndpointOptions_WhenOptionsIsNull_ReturnsDefaultEndpointOptions()
+    public void ToEndpointOptions_MapsAllAzureAndOllamaPropertiesCorrectly()
     {
+        // Arrange
+        var legacyOptions = new LLMConnectClientOptions
+        {
+            AzureResourceName = "my-resource",
+            AzureDeploymentName = "my-deployment",
+            AzureApiVersion = "2024-02-15-preview",
+            OllamaPort = 12345,
+            ExtraOptions = new Dictionary<string, object> { { "custom", "value" } }
+        };
+
         // Act
-        var result = LLMConnectClientOptionsExtensions.ToEndpointOptions(null!);
+        var result = legacyOptions.ToEndpointOptions();
 
         // Assert
         result.Should().NotBeNull();
-        result.Endpoint.Should().BeNull();
-        result.BaseUrl.Should().BeNull();
+        result.AzureResourceName.Should().Be(legacyOptions.AzureResourceName);
+        result.AzureDeploymentName.Should().Be(legacyOptions.AzureDeploymentName);
+        result.AzureApiVersion.Should().Be(legacyOptions.AzureApiVersion);
+        result.OllamaPort.Should().Be(legacyOptions.OllamaPort);
+        result.ExtraOptions.Should().BeEquivalentTo(legacyOptions.ExtraOptions);
+    }
+
+    [Fact]
+    public void ToEndpointOptions_WithNullInput_ReturnsEmptyEndpointOptions()
+    {
+        // Arrange
+        LLMConnectClientOptions? legacyOptions = null;
+
+        // Act
+        var result = legacyOptions.ToEndpointOptions();
+
+        // Assert
+        result.Should().NotBeNull();
+        result.AzureResourceName.Should().BeNull();
+        result.AzureDeploymentName.Should().BeNull();
+        result.AzureApiVersion.Should().BeNull();
         result.OllamaPort.Should().BeNull();
-        result.ChatResponseDeserializer.Should().BeNull();
-        result.EmbeddingResponseDeserializer.Should().BeNull();
-        result.CustomStreamEventReaderFactory.Should().BeNull();
-        result.CustomStreamChunkParserFactory.Should().BeNull();
         result.ExtraOptions.Should().BeNull();
     }
 
     [Fact]
-    public void ToEndpointOptions_WhenOptionsIsValid_MapsAllProperties()
+    public void ToEndpointOptions_WithPartialAzureProperties_MapsWhatIsAvailable()
     {
         // Arrange
-        Func<string, CancellationToken, Task<ChatResponse>> chatDeserializer = (json, ct) => Task.FromResult(new ChatResponse());
-        Func<string, CancellationToken, Task<EmbeddingResponse>> embedDeserializer = (json, ct) => Task.FromResult(new EmbeddingResponse());
-        Func<IStreamEventReader> readerFactory = () => null!;
-        Func<IStreamChunkParser> parserFactory = () => null!;
-        var extraOptions = new Dictionary<string, object> { { "key", "value" } };
-
-        var original = new LLMConnectClientOptions
+        var legacyOptions = new LLMConnectClientOptions
         {
-            Endpoint = "https://custom.endpoint",
-            BaseUrl = "https://custom.baseurl",
-            OllamaPort = 11435,
-            ChatResponseDeserializer = chatDeserializer,
-            EmbeddingResponseDeserializer = embedDeserializer,
-            CustomStreamEventReaderFactory = readerFactory,
-            CustomStreamChunkParserFactory = parserFactory,
+            AzureResourceName = "my-resource"
+        };
+
+        // Act
+        var result = legacyOptions.ToEndpointOptions();
+
+        // Assert
+        result.AzureResourceName.Should().Be("my-resource");
+        result.AzureDeploymentName.Should().BeNull();
+        result.AzureApiVersion.Should().BeNull();
+        result.OllamaPort.Should().BeNull();
+        result.ExtraOptions.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToEndpointOptions_WithExtraOptions_MapsExtraOptionsCorrectly()
+    {
+        // Arrange
+        var extraOptions = new Dictionary<string, object>
+        {
+            { "custom-header", "value1" },
+            { "custom-setting", 123 }
+        };
+        var legacyOptions = new LLMConnectClientOptions
+        {
             ExtraOptions = extraOptions
         };
 
         // Act
-        var result = original.ToEndpointOptions();
+        var result = legacyOptions.ToEndpointOptions();
 
         // Assert
-        result.Endpoint.Should().Be(original.Endpoint);
-        result.BaseUrl.Should().Be(original.BaseUrl);
-        result.OllamaPort.Should().Be(original.OllamaPort);
-        result.ChatResponseDeserializer.Should().BeSameAs(original.ChatResponseDeserializer);
-        result.EmbeddingResponseDeserializer.Should().BeSameAs(original.EmbeddingResponseDeserializer);
-        result.CustomStreamEventReaderFactory.Should().BeSameAs(original.CustomStreamEventReaderFactory);
-        result.CustomStreamChunkParserFactory.Should().BeSameAs(original.CustomStreamChunkParserFactory);
-        result.ExtraOptions.Should().BeSameAs(original.ExtraOptions);
+        result.ExtraOptions.Should().NotBeNull();
+        result.ExtraOptions.Should().ContainKey("custom-header");
+        result.ExtraOptions["custom-header"].Should().Be("value1");
+        result.ExtraOptions.Should().ContainKey("custom-setting");
+        result.ExtraOptions["custom-setting"].Should().Be(123);
     }
 }

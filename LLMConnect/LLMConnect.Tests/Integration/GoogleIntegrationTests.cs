@@ -1,23 +1,26 @@
 ﻿using FluentAssertions;
 using LLMConnect.Exceptions;
 using LLMConnect.Models;
-using OpenTelemetry.Trace;
 using System.Net;
 using System.Text;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
-using Xunit;
 
 namespace LLMConnect.Tests.Integration;
 
 public class GoogleIntegrationTests : IntegrationTestBase
 {
-    public GoogleIntegrationTests() : base(ProviderType.Google, "models/gemini-3.5-flash:generateContent") { }
+    private const string Model = "gemini-3.5-flash";
+    private const string ChatPath = $"/v1beta/models/{Model}:generateContent";
+    private const string StreamPath = $"/v1beta/models/{Model}:streamGenerateContent";
+    private const string EmbedPath = $"/v1beta/models/{Model}:embedContent";
+
+    public GoogleIntegrationTests() : base(ProviderType.Google) { }
 
     // ---------- Stubs ----------
     private void StubChat(string responseJson, HttpStatusCode statusCode = HttpStatusCode.OK)
         => _server
-            .Given(Request.Create().WithPath("/models/gemini-3.5-flash:generateContent").UsingPost())
+            .Given(Request.Create().WithPath(ChatPath).UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(statusCode)
                 .WithHeader("Content-Type", "application/json")
@@ -33,7 +36,7 @@ public class GoogleIntegrationTests : IntegrationTestBase
         }
 
         _server
-            .Given(Request.Create().WithPath("/models/gemini-3.5-flash:streamGenerateContent").WithParam("alt", "sse").UsingPost())
+            .Given(Request.Create().WithPath(StreamPath).WithParam("alt", "sse").UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(statusCode)
                 .WithHeader("Content-Type", "text/event-stream")
@@ -104,7 +107,7 @@ public class GoogleIntegrationTests : IntegrationTestBase
             "usageMetadata": { "promptTokenCount": 5, "candidatesTokenCount": 2 }
         }
         """;
-        StubRetryScenario("/models/gemini-3.5-flash:generateContent", fail, success);
+        StubRetryScenario(ChatPath, fail, success);
 
         var result = await _client.ChatAsync(CreateChatRequest());
 
@@ -121,7 +124,7 @@ public class GoogleIntegrationTests : IntegrationTestBase
         """;
 
         _server
-            .Given(Request.Create().WithPath("/models/gemini-3.5-flash:embedContent").UsingPost())
+            .Given(Request.Create().WithPath(EmbedPath).UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(HttpStatusCode.OK)
                 .WithHeader("Content-Type", "application/json")

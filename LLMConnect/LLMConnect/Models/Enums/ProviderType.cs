@@ -6,15 +6,28 @@
 /// </summary>
 public enum ProviderType
 {
-    /// <summary>OpenAI's Chat Completions API.</summary>
+    /// <summary>
+    /// Azure OpenAI's Chat Completions API.
+    /// </summary>
+    AzureOpenAI,
+
+    /// <summary>
+    /// OpenAI's Chat Completions API.
+    /// </summary>
     OpenAI,
 
-    /// <summary>Anthropic's Messages API.</summary>
+    /// <summary>
+    /// Anthropic's Messages API.
+    /// </summary>
     Anthropic,
 
-    /// <summary>Google's Gemini (Generative Language) API.</summary>
+    /// <summary>
+    /// Google's Gemini (Generative Language) API.
+    /// </summary>
     Google,
 
-    /// <summary>A locally hosted Ollama server.</summary>
+    /// <summary>
+    /// A locally hosted Ollama server.
+    /// </summary>
     Ollama
 }

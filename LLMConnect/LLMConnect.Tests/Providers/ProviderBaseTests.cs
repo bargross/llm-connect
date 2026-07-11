@@ -204,55 +204,6 @@ public class ProviderBaseTests
         // No log verification because logger is null
     }
 
-    // ---------- ReadFromStreamAsync Tests ----------
-
-    [Fact]
-    public async Task ReadFromStreamAsync_WithoutCustomParsers_UsesFactory()
-    {
-        var streamContent = """
-            data: {"choices":[{"delta":{"content":"Hello"}}]}
-            data: {"choices":[{"delta":{"content":" world"}}]}
-            data: [DONE]
-            """;
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(streamContent));
-        var endpointOpts = new LLMConnectEndpointOptions();
-
-        var chunks = await _provider.ReadFromStreamAsync(stream, _options, endpointOpts, CancellationToken.None)
-            .ToListAsync();
-
-        chunks.Should().HaveCount(2);
-        chunks[0].Content.Should().Be("Hello");
-        chunks[1].Content.Should().Be(" world");
-    }
-
-    [Fact]
-    public async Task ReadFromStreamAsync_WithCustomParsers_UsesCustom()
-    {
-        var streamContent = """
-        custom: Hello
-        custom: world
-        """;
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(streamContent));
-
-        // Custom reader that yields events from "custom: " lines
-        var customReader = new CustomStreamEventReader(stream);
-        var customParser = new CustomStreamChunkParser();
-
-        var endpointOpts = new LLMConnectEndpointOptions
-        {
-            Endpoint = "custom",
-            CustomStreamEventReaderFactory = () => customReader,
-            CustomStreamChunkParserFactory = () => customParser
-        };
-
-        var chunks = await _provider.ReadFromStreamAsync(stream, _options, endpointOpts, CancellationToken.None)
-            .ToListAsync();
-
-        chunks.Should().HaveCount(2);
-        chunks[0].Content.Should().Be("Hello");
-        chunks[1].Content.Should().Be("world");
-    }
-
     // ---------- DeserializeResponseAsync Tests ----------
 
     [Fact]
@@ -359,21 +310,6 @@ public class ProviderBaseTests
 
     // ---------- GetUrl Tests ----------
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void GetUrl_WithEndpointSet_ReturnsEndpointVerbatim_IgnoringModelAndPath(bool isStreaming)
-    {
-        var endpointOpts = new LLMConnectEndpointOptions
-        {
-            Endpoint = "https://my-custom-gateway.com/custom/path"
-        };
-
-        var url = _provider.GetUrl(endpointOpts, QueryType.Chat, isStreaming, model: "gpt-5.5", internalBaseUrl: "https://api.openai.com/v1/");
-
-        url.Should().Be("https://my-custom-gateway.com/custom/path");
-    }
-
     [Fact]
     public void GetUrl_WithoutEndpointOrBaseUrl_NonStreaming_ReturnsRelativePath()
     {
@@ -392,20 +328,6 @@ public class ProviderBaseTests
         var url = _provider.GetUrl(endpointOpts, QueryType.Chat, isStreaming: true, internalBaseUrl: "https://api.openai.com/v1/");
 
         url.Should().Be("https://api.openai.com/v1/chat/completions");
-    }
-
-    [Fact]
-    public void GetUrl_WithBaseUrlMissingTrailingSlash_Streaming_StillProducesWellFormedUrl()
-    {
-        // internalBaseUrl represents what HttpClientConfigurator would have already
-        // normalized onto HttpClient.BaseAddress (always ends with '/'). GetUrl must
-        // trust that value rather than re-reading the raw, un-normalized BaseUrl option.
-        var endpointOpts = new LLMConnectEndpointOptions { BaseUrl = "https://api.openai.com/v1" };
-
-        var url = _provider.GetUrl(endpointOpts, QueryType.Chat, isStreaming: true, internalBaseUrl: "https://api.openai.com/v1/");
-
-        url.Should().Be("https://api.openai.com/v1/chat/completions");
-        url.Should().NotContain("v1chat");
     }
 
     [Fact]

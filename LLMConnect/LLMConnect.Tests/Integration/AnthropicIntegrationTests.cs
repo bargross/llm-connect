@@ -10,12 +10,12 @@ namespace LLMConnect.Tests.Integration;
 
 public class AnthropicIntegrationTests : IntegrationTestBase
 {
-    public AnthropicIntegrationTests() : base(ProviderType.Anthropic, "messages") { }
+    public AnthropicIntegrationTests() : base(ProviderType.Anthropic) { }
 
     // ---------- Stubs ----------
     private void StubChat(string responseJson, HttpStatusCode statusCode = HttpStatusCode.OK)
         => _server
-            .Given(Request.Create().WithPath("/messages").UsingPost())
+            .Given(Request.Create().WithPath("/v1/messages").UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(statusCode)
                 .WithHeader("Content-Type", "application/json")
@@ -35,7 +35,7 @@ public class AnthropicIntegrationTests : IntegrationTestBase
         sb.AppendLine();
 
         _server
-            .Given(Request.Create().WithPath("/messages").UsingPost())
+            .Given(Request.Create().WithPath("/v1/messages").UsingPost())
             .RespondWith(Response.Create()
                 .WithStatusCode(statusCode)
                 .WithHeader("Content-Type", "text/event-stream")
@@ -92,7 +92,6 @@ public class AnthropicIntegrationTests : IntegrationTestBase
 
         var act = async () => await _client.ChatAsync(CreateChatRequest());
 
-
         var ex = await act.Should().ThrowAsync<LLMConnectException>();
 
         ex.Which.Provider.Should().Be("Anthropic");
@@ -105,17 +104,20 @@ public class AnthropicIntegrationTests : IntegrationTestBase
         var fail = @"{""error"":{""message"":""Rate limit""}}";
         var success = """
         {
+            "id": "msg_retry",
+            "model": "claude-3-5-sonnet-20241022",
+            "stop_reason": "end_turn",
             "content": [{ "type": "text", "text": "Retry worked!" }],
             "usage": { "input_tokens": 5, "output_tokens": 2 }
         }
         """;
 
-        StubRetryScenario("/messages", fail, success);
+        StubRetryScenario("/v1/messages", fail, success);
 
         var result = await _client.ChatAsync(CreateChatRequest());
 
         result.Content.Should().Be("Retry worked!");
     }
 
-    // Anthropic does not support embeddings
+    // Anthropic does not support embeddings – no test needed
 }

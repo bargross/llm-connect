@@ -1,67 +1,31 @@
-﻿using LLMConnect.Models;
+﻿namespace LLMConnect.Settings;
 
-namespace LLMConnect.Settings
+/// <summary>
+/// Configuration options for connecting to a specific LLM provider endpoint, including custom deserialization and streaming behavior.
+/// </summary>
+public class LLMConnectEndpointOptions
 {
     /// <summary>
-    /// Configuration options for connecting to a specific LLM provider endpoint, including custom deserialization and streaming behavior.
+    /// The name of the Azure resource (e.g., "my-azure-openai-resource") to use for requests.
     /// </summary>
-    public class LLMConnectEndpointOptions
-    {
-        /// <summary>
-        /// A complete, literal URL to call for every operation on this provider.
-        /// When set, the library does NOT append any resource path or perform
-        /// {model} substitution — the URL is used exactly as given.
-        /// </summary>
-        public string? Endpoint { get; set; }
+    public string? AzureResourceName { get; set; }
 
-        /// <summary>
-        /// Overrides just the provider's domain (+ version segment). The library
-        /// still builds the correct resource path (messages, chat/completions,
-        /// models/{model}:generateContent, etc.) on top of this, same as it does
-        /// for the built-in default endpoints.
-        /// </summary>
-        public string? BaseUrl { get; set; }
+    /// <summary>
+    /// The name of the Azure deployment (e.g., "my-deployment") to use for requests.
+    /// </summary>
+    public string? AzureDeploymentName { get; set; }
 
-        /// <summary>
-        /// The port a local Ollama server is listening on. Defaults to <c>11434</c>
-        /// if not set. Ignored if <see cref="Endpoint"/> is set.
-        /// </summary>
-        public int? OllamaPort { get; set; }
+    /// <summary>
+    /// The API version to use for Azure OpenAI requests (e.g., "2023-06-01-preview").
+    /// </summary>
+    public string? AzureApiVersion { get; set; }
 
-        /// <summary>
-        /// Optional custom response deserializer for provider-specific or custom endpoints.
-        /// If provided, this delegate is used to deserialize the HTTP response content
-        /// into a ChatResponse object, bypassing the built-in provider-specific deserialization.
-        /// </summary>
-        public Func<string, CancellationToken, Task<ChatResponse?>>? ChatResponseDeserializer { get; set; }
+    /// <summary>
+    /// The port a local Ollama server is listening on. Defaults to <c>11434</c>
+    /// if not set. Ignored if <see cref="Endpoint"/> is set.
+    /// </summary>
+    public int? OllamaPort { get; set; }
 
-        /// <summary>
-        /// Optional custom embedding response deserializer for provider-specific or custom endpoints.
-        /// </summary>
-        public Func<string, CancellationToken, Task<EmbeddingResponse?>>? EmbeddingResponseDeserializer { get; set; }
-
-        /// <summary>
-        /// Optional custom stream event reader for custom endpoints.
-        /// If provided, this is used instead of the built-in reader for the provider.
-        /// </summary>
-        public Func<IStreamEventReader>? CustomStreamEventReaderFactory { get; set; }
-
-        /// <summary>
-        /// Optional custom stream chunk parser for custom endpoints.
-        /// If provided, this is used instead of the built-in parser for the provider.
-        /// </summary>
-        public Func<IStreamChunkParser>? CustomStreamChunkParserFactory { get; set; }
-
-        /// <summary>Reserved for future provider-specific configuration.</summary>
-        public Dictionary<string, object>? ExtraOptions { get; set; }
-
-        internal bool HasCustomChatDeserializer => ChatResponseDeserializer is not null;
-
-        internal bool HasCustomEmbeddingDeserializer => EmbeddingResponseDeserializer is not null;
-
-        internal bool HasEndpoint => !string.IsNullOrWhiteSpace(Endpoint);
-        internal bool HasBaseUrl => !string.IsNullOrWhiteSpace(BaseUrl);
-
-        internal bool HasCustomReaderAndParser => CustomStreamEventReaderFactory is not null && CustomStreamChunkParserFactory is not null;
-    }
+    /// <summary>Reserved for future provider-specific configuration.</summary>
+    public Dictionary<string, object>? ExtraOptions { get; set; }
 }

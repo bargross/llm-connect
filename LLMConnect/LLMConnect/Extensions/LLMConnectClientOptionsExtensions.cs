@@ -14,6 +14,7 @@ namespace LLMConnect
                     ProviderType.Google => "gemini-3.5-flash",
                     ProviderType.Anthropic => "claude-sonnet-5",
                     ProviderType.OpenAI => "gpt-5.5",
+                    ProviderType.AzureOpenAI => "gpt-4",
                     _ => throw new NotSupportedException($"Provider '{options.Provider}' is not supported.")
                 };
 
@@ -30,7 +31,8 @@ namespace LLMConnect
                 DefaultModel = options.DefaultModel,
                 Timeout = options.Timeout,
                 MaxRetries = options.MaxRetries,
-                LoggerFactory = options.LoggerFactory
+                LoggerFactory = options.LoggerFactory,
+                
             };
         }
 
@@ -41,13 +43,10 @@ namespace LLMConnect
 
             return new LLMConnectEndpointOptions
             {
-                Endpoint = options.Endpoint,
-                BaseUrl = options.BaseUrl,
+                AzureApiVersion = options.AzureApiVersion,
+                AzureDeploymentName = options.AzureDeploymentName,
+                AzureResourceName = options.AzureResourceName,
                 OllamaPort = options.OllamaPort,
-                ChatResponseDeserializer = options.ChatResponseDeserializer,
-                EmbeddingResponseDeserializer = options.EmbeddingResponseDeserializer,
-                CustomStreamEventReaderFactory = options.CustomStreamEventReaderFactory,
-                CustomStreamChunkParserFactory = options.CustomStreamChunkParserFactory,
                 ExtraOptions = options.ExtraOptions
             };
         }

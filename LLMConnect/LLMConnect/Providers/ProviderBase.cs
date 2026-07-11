@@ -2,7 +2,6 @@
 using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -79,50 +78,13 @@ namespace LLMConnect
             throw exception;
         }
 
-        public async IAsyncEnumerable<ChatChunk> ReadFromStreamAsync(
-            Stream stream, 
-            LLMConnectGeneralOptions generalOpts, 
-            LLMConnectEndpointOptions endpointOpts, 
-            [EnumeratorCancellation] CancellationToken cancellationToken)
-        {
-            var reader = endpointOpts.HasEndpoint && endpointOpts.HasCustomReaderAndParser
-                ? endpointOpts.CustomStreamEventReaderFactory()
-                : StreamReaderFactory.Create(generalOpts.Provider, generalOpts);
-
-            var parser = endpointOpts.HasEndpoint && endpointOpts.HasCustomReaderAndParser
-                ? endpointOpts.CustomStreamChunkParserFactory()
-                : StreamChunkParserFactory.Create(generalOpts.Provider, generalOpts);
-
-            await foreach (var evt in reader.ReadEventsAsync(stream, cancellationToken))
-            {
-                var chunk = parser.Parse(evt);
-                if (chunk != null)
-                    yield return chunk;
-            }
-        }
-
         protected async Task<TResponse?> DeserializeResponseAsync<TProviderResponse, TResponse>(
             HttpResponseMessage response,
             ProviderType? provider,
-            Func<bool> customDeserializerEvaluator,
-            Func<string, Task<TResponse?>> jsonStringToResponse,
             Func<TProviderResponse?, TResponse?> toChatResponse,
             CancellationToken cancellationToken)
         {
             var json = await response.Content.ReadAsStringAsync(cancellationToken);
-
-            // If a custom deserializer is provided, use it
-            if (customDeserializerEvaluator())
-            {
-                try
-                {
-                    return await jsonStringToResponse(json);
-                }
-                catch (Exception ex)
-                {
-                    throw new LLMConnectException("CustomDeserializer", $"Chat deserializer failed: {ex.Message}", ex);
-                }
-            }
 
             // Otherwise, use the standard provider-specific deserialization
             var providerResponse = JsonSerializer.Deserialize<TProviderResponse>(json);
@@ -134,22 +96,24 @@ namespace LLMConnect
             return chatResponse;
         }
 
-        protected string GetUrl(LLMConnectEndpointOptions options, QueryType type, bool isStreaming, string? model = null, string? internalBaseUrl = null, ILogger? logger = null)
+        protected string GetUrlRelativePath(
+            LLMConnectEndpointOptions options,
+            QueryType type,
+            bool isStreaming,
+            string? model = null,
+            ILogger? logger = null)
         {
-            if (options.HasEndpoint)
-                return options.Endpoint!;
+            if (_generalOpts.Provider == ProviderType.Google && string.IsNullOrWhiteSpace(model))
+                throw new LLMConnectException(_generalOpts.Provider?.ToString() ?? "ProviderBase", "Model must be specified for Google provider.");
 
-            var queryParams = EndpointRegistry.GetEndpointParams(_generalOpts.Provider, type, isStreaming, logger);
+            var queryParams = EndpointRegistry.GetEndpointParams(
+                _generalOpts.Provider.Value,
+                type,
+                isStreaming,
+                model,
+                logger);
 
-            if (_generalOpts.Provider == ProviderType.Google)
-            {
-                if (string.IsNullOrWhiteSpace(model))
-                    throw new LLMConnectException(_generalOpts.Provider?.ToString() ?? "ProviderBase", "Model must be specified for Google provider.");
-
-                queryParams = queryParams.Replace("{model}", model);
-            }
-
-            return isStreaming ? $"{internalBaseUrl}{queryParams}" : queryParams;
+            return queryParams;
         }
     }
 }

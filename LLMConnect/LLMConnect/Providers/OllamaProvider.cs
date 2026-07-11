@@ -26,8 +26,8 @@ internal class OllamaProvider: ProviderBase<OllamaProvider>, ILLMProvider
 
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var url = GetUrl(_endpointOpts, QueryType.Chat, false, null, _httpClient.BaseAddress?.ToString(), _logger);
-        var response = await _httpClient.PostAsync(url, content, cancellationToken);
+        var relativePath = GetUrlRelativePath(_endpointOpts, QueryType.Chat, false, null, _logger);
+        var response = await _httpClient.PostAsync(relativePath, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
             await LogAndThrow(_generalOpts.Provider, response, cancellationToken);
@@ -35,8 +35,6 @@ internal class OllamaProvider: ProviderBase<OllamaProvider>, ILLMProvider
         return await DeserializeResponseAsync<OllamaChatResponse, ChatResponse>(
             response,
             _generalOpts.Provider,
-            () => _endpointOpts.HasEndpoint && _endpointOpts.HasCustomChatDeserializer,
-            async ollamaResponseJsonString => await _endpointOpts.ChatResponseDeserializer(ollamaResponseJsonString, cancellationToken),
             ollamaResponse => ollamaResponse?.ToChatResponse(),
             cancellationToken);
     }
@@ -49,11 +47,11 @@ internal class OllamaProvider: ProviderBase<OllamaProvider>, ILLMProvider
 
         ollamaRequest.Stream = true;
 
-        var url = GetUrl(_endpointOpts, QueryType.Chat, true, null, _httpClient.BaseAddress?.ToString(), _logger);
+        var relativePath = GetUrlRelativePath(_endpointOpts, QueryType.Chat, true, null, _logger);
 
         var json = JsonSerializer.Serialize(ollamaRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using var messageReq = new HttpRequestMessage(HttpMethod.Post, url)
+        using var messageReq = new HttpRequestMessage(HttpMethod.Post, relativePath)
         {
             Content = content
         };
@@ -64,9 +62,14 @@ internal class OllamaProvider: ProviderBase<OllamaProvider>, ILLMProvider
             await LogAndThrow(_generalOpts.Provider, response, cancellationToken);
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        await foreach (var chunk in ReadFromStreamAsync(stream, _generalOpts, _endpointOpts, cancellationToken))
+        var reader = StreamReaderFactory.Create(_generalOpts.Provider, _generalOpts);
+        var parser = StreamChunkParserFactory.Create(_generalOpts.Provider, _generalOpts);
+
+        await foreach (var evt in reader.ReadEventsAsync(stream, cancellationToken))
         {
-            yield return chunk;
+            var chunk = parser.Parse(evt);
+            if (chunk != null)
+                yield return chunk;
         }
     }
 
@@ -78,8 +81,8 @@ internal class OllamaProvider: ProviderBase<OllamaProvider>, ILLMProvider
         var json = JsonSerializer.Serialize(ollamaRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var url = GetUrl(_endpointOpts, QueryType.Embeddings, false, null, _httpClient.BaseAddress?.ToString(), _logger);
-        var response = await _httpClient.PostAsync(url, content, cancellationToken);
+        var relativePath = GetUrlRelativePath(_endpointOpts, QueryType.Embeddings, false, null, _logger);
+        var response = await _httpClient.PostAsync(relativePath, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
             await LogAndThrow(_generalOpts.Provider, response, cancellationToken);
@@ -87,8 +90,6 @@ internal class OllamaProvider: ProviderBase<OllamaProvider>, ILLMProvider
         return await DeserializeResponseAsync<OllamaEmbeddingResponse, EmbeddingResponse>(
             response,
             _generalOpts.Provider,
-            () => _endpointOpts.HasEndpoint && _endpointOpts.HasCustomEmbeddingDeserializer,
-            async ollamaResponseJsonString => await _endpointOpts.EmbeddingResponseDeserializer(ollamaResponseJsonString, cancellationToken),
             ollamaResponse => ollamaResponse?.ToEmbeddingResponse(),
             cancellationToken);
     }

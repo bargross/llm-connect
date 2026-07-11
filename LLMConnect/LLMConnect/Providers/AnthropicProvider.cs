@@ -26,8 +26,8 @@ internal class AnthropicProvider: ProviderBase<AnthropicProvider>, ILLMProvider
         var json = JsonSerializer.Serialize(anthropicRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var url = GetUrl(_endpointOpts, QueryType.Chat, false, null,_httpClient.BaseAddress?.ToString(), _logger);
-        var response = await _httpClient.PostAsync(url, content, cancellationToken);
+        var relativePath = GetUrlRelativePath(_endpointOpts, QueryType.Chat, false, null, _logger);
+        var response = await _httpClient.PostAsync(relativePath, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
             await LogAndThrow(_generalOpts.Provider, response, cancellationToken);
@@ -35,8 +35,6 @@ internal class AnthropicProvider: ProviderBase<AnthropicProvider>, ILLMProvider
         return await DeserializeResponseAsync<AnthropicChatResponse, ChatResponse>(
             response,
             _generalOpts.Provider,
-            () => _endpointOpts.HasEndpoint && _endpointOpts.HasCustomChatDeserializer,
-            async anthropicResponseJsonString => await _endpointOpts.ChatResponseDeserializer(anthropicResponseJsonString, cancellationToken),
             anthropicResponse => anthropicResponse?.ToChatResponse(),
             cancellationToken);
     }
@@ -49,11 +47,11 @@ internal class AnthropicProvider: ProviderBase<AnthropicProvider>, ILLMProvider
 
         anthropicRequest.Stream = true;
 
-        var url = GetUrl(_endpointOpts, QueryType.Chat, true, null, _httpClient.BaseAddress?.ToString(), _logger);
+        var relativePath = GetUrlRelativePath(_endpointOpts, QueryType.Chat, true, null, _logger);
 
         var json = JsonSerializer.Serialize(anthropicRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using var messageReq = new HttpRequestMessage(HttpMethod.Post, url)
+        using var messageReq = new HttpRequestMessage(HttpMethod.Post, relativePath)
         {
             Content = content
         };
@@ -65,9 +63,14 @@ internal class AnthropicProvider: ProviderBase<AnthropicProvider>, ILLMProvider
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
 
-        await foreach (var chunk in ReadFromStreamAsync(stream, _generalOpts, _endpointOpts, cancellationToken))
+        var reader = StreamReaderFactory.Create(_generalOpts.Provider, _generalOpts);
+        var parser = StreamChunkParserFactory.Create(_generalOpts.Provider, _generalOpts);
+
+        await foreach (var evt in reader.ReadEventsAsync(stream, cancellationToken))
         {
-            yield return chunk;
+            var chunk = parser.Parse(evt);
+            if (chunk != null)
+                yield return chunk;
         }
     }
 

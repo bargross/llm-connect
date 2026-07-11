@@ -131,35 +131,6 @@ public class GoogleProviderTests
     }
 
     [Fact]
-    public async Task ChatAsync_WithCustomDeserializer_UsesCustomDeserializer()
-    {
-        var customJson = @"{""custom"":""Custom response""}";
-        var httpClient = CreateMockHttpClient(CreateSuccessResponse(customJson));
-        var endpointOpts = new LLMConnectEndpointOptions
-        {
-            Endpoint = "custom",
-            ChatResponseDeserializer = async (json, ct) =>
-            {
-                await Task.CompletedTask;
-                using var doc = JsonDocument.Parse(json);
-                var text = doc.RootElement.GetProperty("custom").GetString();
-                return new ChatResponse { Content = text ?? string.Empty };
-            }
-        };
-        var provider = new GoogleProvider(httpClient, _generalOptions, endpointOpts);
-
-        var request = new ChatRequest
-        {
-            Messages = new List<Message> { new UserMessage("Hi") }
-        };
-
-        var result = await provider.ChatAsync(request, CancellationToken.None);
-
-        result.Should().NotBeNull();
-        result.Content.Should().Be("Custom response");
-    }
-
-    [Fact]
     public async Task ChatAsync_ValidationFails_ThrowsArgumentException()
     {
         var httpClient = CreateMockHttpClient(CreateSuccessResponse("{}"));
@@ -263,63 +234,6 @@ public class GoogleProviderTests
         exception.Which.Message.Should().Be("Invalid API key");
     }
 
-    [Fact]
-    public async Task StreamAsync_WithCustomReadersAndParsers_UsesCustom()
-    {
-        var customContent = "custom: Hello\ncustom: world\n";
-        var response = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(customContent, Encoding.UTF8, "text/plain")
-        };
-        var handlerMock = new Mock<HttpMessageHandler>();
-        handlerMock
-            .Protected()
-            .Setup<Task<HttpResponseMessage>>(
-                "SendAsync",
-                ItExpr.IsAny<HttpRequestMessage>(),
-                ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(response)
-            .Verifiable();
-
-        var httpClient = new HttpClient(handlerMock.Object)
-        {
-            BaseAddress = new Uri("https://generativelanguage.googleapis.com/v1beta/models/")
-        };
-
-        // Custom reader and parser
-        var customReader = new Mock<IStreamEventReader>();
-        customReader
-            .Setup(x => x.ReadEventsAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
-            .Returns((Stream stream, CancellationToken ct) => ReadCustomEventsAsync(stream, ct));
-
-        var customParser = new Mock<IStreamChunkParser>();
-        customParser
-            .Setup(x => x.Parse(It.IsAny<StreamEvent>()))
-            .Returns<StreamEvent>(evt => new ChatChunk { Content = evt.Data, IsComplete = false });
-
-        var endpointOpts = new LLMConnectEndpointOptions
-        {
-            Endpoint = "custom",
-            CustomStreamEventReaderFactory = () => customReader.Object,
-            CustomStreamChunkParserFactory = () => customParser.Object
-        };
-
-        var provider = new GoogleProvider(httpClient, _generalOptions, endpointOpts);
-
-        var request = new ChatRequest
-        {
-            Messages = new List<Message> { new UserMessage("Say hello") }
-        };
-
-        var chunks = await provider.StreamAsync(request, CancellationToken.None).ToListAsync();
-
-        chunks.Should().HaveCount(2);
-        chunks[0].Content.Should().Be("Hello");
-        chunks[1].Content.Should().Be("world");
-        customReader.Verify(x => x.ReadEventsAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Once);
-        customParser.Verify(x => x.Parse(It.IsAny<StreamEvent>()), Times.Exactly(2));
-    }
-
     private static async IAsyncEnumerable<StreamEvent> ReadCustomEventsAsync(Stream stream, [EnumeratorCancellation] CancellationToken ct)
     {
         using var reader = new StreamReader(stream);
@@ -369,32 +283,6 @@ public class GoogleProviderTests
         var exception = await act.Should().ThrowAsync<LLMConnectException>();
         exception.Which.Provider.Should().Be("Google");
         exception.Which.Message.Should().Be("Invalid API key");
-    }
-
-    [Fact]
-    public async Task GetEmbeddingAsync_WithCustomDeserializer_UsesCustomDeserializer()
-    {
-        var customJson = @"{""custom"": [1.0, 2.0]}";
-        var httpClient = CreateMockHttpClient(CreateSuccessResponse(customJson));
-        var endpointOpts = new LLMConnectEndpointOptions
-        {
-            Endpoint = "custom",
-            EmbeddingResponseDeserializer = async (json, ct) =>
-            {
-                await Task.CompletedTask;
-                using var doc = JsonDocument.Parse(json);
-                var values = doc.RootElement.GetProperty("custom").EnumerateArray().Select(x => (float)x.GetDouble()).ToArray();
-                return new EmbeddingResponse { Embedding = values };
-            }
-        };
-        var provider = new GoogleProvider(httpClient, _generalOptions, endpointOpts);
-
-        var request = new EmbeddingRequest { Text = "Hello" };
-
-        var result = await provider.GetEmbeddingAsync(request, CancellationToken.None);
-
-        result.Should().NotBeNull();
-        result.Embedding.Should().BeEquivalentTo(new float[] { 1.0f, 2.0f });
     }
 
     [Fact]
