@@ -11,7 +11,7 @@
     <Version>1.0.1</Version>
     <Authors>Leonardo H. Mengesha</Authors>
     <Description>A provider-agnostic .NET client for Large Language Models. One API for AzureOpenAI, OpenAI, Anthropic, Google Gemini, and local Ollama. Full async, streaming, and DI support.</Description>
-    <PackageTags>llm;openai;anthropic;google;ollama;chat;llms;llm-chat</PackageTags>
+    <PackageTags>llm;openai;azureopenai;anthropic;google;ollama;chat;llms;llm-chat</PackageTags>
     <RepositoryUrl>https://github.com/bargross/llm-connect</RepositoryUrl>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
