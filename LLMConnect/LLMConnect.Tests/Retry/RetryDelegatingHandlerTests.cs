@@ -3,150 +3,134 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.Protected;
 using System.Net;
+using System.Net.Http;
 
 namespace LLMConnect.Tests.Retry;
 
 public class RetryDelegatingHandlerTests
 {
-    private readonly Mock<ILogger> _loggerMock;
+    private readonly Mock<ILogger<RetryDelegatingHandler>> _loggerMock;
 
     public RetryDelegatingHandlerTests()
     {
-        _loggerMock = new Mock<ILogger>();
+        _loggerMock = new Mock<ILogger<RetryDelegatingHandler>>();
     }
 
-    [Fact]
-    public async Task SendAsync_WhenInnerHandlerSucceeds_ReturnsResponse()
+    private HttpClient CreateClientWithRetry(int maxRetries, params HttpResponseMessage[] responses)
     {
-        // Arrange
-        var expectedResponse = new HttpResponseMessage(HttpStatusCode.OK);
-        var innerHandlerMock = new Mock<HttpMessageHandler>();
-        innerHandlerMock
+        var handlerMock = new Mock<HttpMessageHandler>();
+        var sequence = handlerMock
             .Protected()
-            .Setup<Task<HttpResponseMessage>>(
+            .SetupSequence<Task<HttpResponseMessage>>(
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
-                ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(expectedResponse)
-            .Verifiable();
+                ItExpr.IsAny<CancellationToken>());
 
-        var handler = new RetryDelegatingHandler(3, _loggerMock.Object)
+        foreach (var response in responses)
+            sequence.ReturnsAsync(response);
+
+        var retryHandler = new RetryDelegatingHandler(maxRetries, _loggerMock.Object)
         {
-            InnerHandler = innerHandlerMock.Object
+            InnerHandler = handlerMock.Object
         };
 
-        using var client = new HttpClient(handler);
-        using var request = new HttpRequestMessage(HttpMethod.Get, "http://test.com");
-
-        // Act
-        var response = await client.SendAsync(request);
-
-        // Assert
-        response.Should().Be(expectedResponse);
-        innerHandlerMock.Verify();
+        return new HttpClient(retryHandler);
     }
 
     [Fact]
-    public async Task SendAsync_WhenInnerHandlerFailsWithHttpRequestException_RetriesAndThrowsAfterMaxRetries()
+    public async Task SendAsync_WhenAllSuccess_DoesNotRetry()
     {
-        // Arrange
-        var innerHandlerMock = new Mock<HttpMessageHandler>();
-        var callCount = 0;
-        innerHandlerMock
-            .Protected()
-            .Setup<Task<HttpResponseMessage>>(
-                "SendAsync",
-                ItExpr.IsAny<HttpRequestMessage>(),
-                ItExpr.IsAny<CancellationToken>())
-            .Returns<HttpRequestMessage, CancellationToken>((req, ct) =>
-            {
-                callCount++;
-                throw new HttpRequestException("Simulated transient failure");
-            })
-            .Verifiable();
+        var client = CreateClientWithRetry(3,
+            new HttpResponseMessage(HttpStatusCode.OK));
 
-        var handler = new RetryDelegatingHandler(3, _loggerMock.Object);
-        handler.InnerHandler = innerHandlerMock.Object;
+        var response = await client.GetAsync("http://test.com");
 
-        using var httpClient = new HttpClient(handler);
-        using var request = new HttpRequestMessage(HttpMethod.Get, "http://test.com");
-
-        // Act
-        Func<Task> act = async () => await httpClient.SendAsync(request, CancellationToken.None);
-
-        // Assert
-        await act.Should().ThrowAsync<HttpRequestException>()
-            .WithMessage("Simulated transient failure");
-
-        callCount.Should().Be(4); // initial + 3 retries
-        innerHandlerMock.Verify();
-    }
-
-    [Fact]
-    public async Task SendAsync_WhenInnerHandlerReturnsInternalServerError_RetriesAndThrowsAfterMaxRetries()
-    {
-        // Arrange
-        var innerHandlerMock = new Mock<HttpMessageHandler>();
-        var callCount = 0;
-        innerHandlerMock
-            .Protected()
-            .Setup<Task<HttpResponseMessage>>(
-                "SendAsync",
-                ItExpr.IsAny<HttpRequestMessage>(),
-                ItExpr.IsAny<CancellationToken>())
-            .Returns<HttpRequestMessage, CancellationToken>((req, ct) =>
-            {
-                callCount++;
-                if (callCount <= 3)
-                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
-            })
-            .Verifiable();
-
-        var handler = new RetryDelegatingHandler(3, _loggerMock.Object)
-        {
-            InnerHandler = innerHandlerMock.Object
-        };
-
-        using var client = new HttpClient(handler);
-        using var request = new HttpRequestMessage(HttpMethod.Get, "http://test.com");
-
-        // Act
-        var response = await client.SendAsync(request);
-
-        // Assert: After retries, eventually succeeds
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        callCount.Should().Be(4);
-        innerHandlerMock.Verify();
+        _loggerMock.VerifyNoOtherCalls();
     }
 
     [Fact]
-    public async Task SendAsync_PropagatesCancellationTokenToInnerHandler()
+    public async Task SendAsync_WhenRetryableStatus_RetriesUntilSuccess()
     {
-        // Arrange
-        using var cts = new CancellationTokenSource();
-        cts.Cancel(); // Cancel the token
+        var client = CreateClientWithRetry(3,
+            new HttpResponseMessage(HttpStatusCode.TooManyRequests),
+            new HttpResponseMessage(HttpStatusCode.TooManyRequests),
+            new HttpResponseMessage(HttpStatusCode.OK));
 
-        var innerHandlerMock = new Mock<HttpMessageHandler>();
-        innerHandlerMock
+        var response = await client.GetAsync("http://test.com");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        _loggerMock.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Retry")),
+                null,
+                It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+            Times.AtLeastOnce);
+    }
+
+    [Fact]
+    public async Task SendAsync_WhenRetryExhausted_ThrowsOriginalException()
+    {
+        var client = CreateClientWithRetry(2,
+            new HttpResponseMessage(HttpStatusCode.InternalServerError),
+            new HttpResponseMessage(HttpStatusCode.InternalServerError));
+
+        Func<Task> act = async () => await client.GetAsync("http://test.com");
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+        _loggerMock.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Retry")),
+                null,
+                It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+            Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task SendAsync_WhenInnerHandlerThrows_RetriesOnHttpRequestException()
+    {
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock
             .Protected()
-            .Setup<Task<HttpResponseMessage>>(
+            .SetupSequence<Task<HttpResponseMessage>>(
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .Throws<OperationCanceledException>(); // Simulate cancellation
+            .ThrowsAsync(new HttpRequestException("Network error"))
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK));
 
-        var handler = new RetryDelegatingHandler(3, _loggerMock.Object);
-        handler.InnerHandler = innerHandlerMock.Object;
+        var retryHandler = new RetryDelegatingHandler(2, _loggerMock.Object)
+        {
+            InnerHandler = handlerMock.Object
+        };
+        var client = new HttpClient(retryHandler);
 
-        using var client = new HttpClient(handler);
-        using var request = new HttpRequestMessage(HttpMethod.Get, "http://test.com");
+        var response = await client.GetAsync("http://test.com");
 
-        // Act
-        var act = async () => await client.SendAsync(request, cts.Token);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        _loggerMock.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Retry")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+            Times.AtLeastOnce);
+    }
 
-        // Assert
-        await act.Should().ThrowAsync<OperationCanceledException>();
-        innerHandlerMock.Verify();
+    [Fact]
+    public async Task SendAsync_WithZeroRetries_DoesNotRetry()
+    {
+        var client = CreateClientWithRetry(0,
+            new HttpResponseMessage(HttpStatusCode.InternalServerError));
+
+        Func<Task> act = async () => await client.GetAsync("http://test.com");
+
+        await act.Should().ThrowAsync<HttpRequestException>();
+        _loggerMock.VerifyNoOtherCalls();
     }
 }

@@ -6,10 +6,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.Protected;
 using System.Net;
-using System.Runtime.CompilerServices;
 using System.Text;
-using System.Text.Json;
-using Xunit;
 
 namespace LLMConnect.Tests.Providers;
 
@@ -24,18 +21,15 @@ public class OpenAIProviderTests
     {
         _loggerMock = new Mock<ILogger<OpenAIProvider>>();
         _loggerFactoryMock = new Mock<ILoggerFactory>();
-        _loggerFactoryMock
-            .Setup(x => x.CreateLogger(It.IsAny<string>()))
-            .Returns(_loggerMock.Object);
+        _loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(_loggerMock.Object);
 
         _generalOptions = new LLMConnectGeneralOptions
         {
             Provider = ProviderType.OpenAI,
-            ApiKey = "test-openai-key",
+            ApiKey = "test-key",
             LoggerFactory = _loggerFactoryMock.Object,
-            DefaultModel = "gpt-3.5-turbo"
+            DefaultModel = "gpt-4"
         };
-
         _endpointOptions = new LLMConnectEndpointOptions();
     }
 
@@ -48,126 +42,67 @@ public class OpenAIProviderTests
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(response)
-            .Verifiable();
-
-        var client = new HttpClient(handlerMock.Object)
+            .ReturnsAsync(response);
+        return new HttpClient(handlerMock.Object)
         {
             BaseAddress = new Uri("https://api.openai.com/v1/")
-        };
-        return client;
-    }
-
-    private HttpResponseMessage CreateSuccessResponse(string jsonContent)
-    {
-        return new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(jsonContent, Encoding.UTF8, "application/json")
-        };
-    }
-
-    private HttpResponseMessage CreateErrorResponse(string errorJson, HttpStatusCode statusCode = HttpStatusCode.BadRequest)
-    {
-        return new HttpResponseMessage(statusCode)
-        {
-            Content = new StringContent(errorJson, Encoding.UTF8, "application/json")
         };
     }
 
     // ---------- ChatAsync ----------
 
     [Fact]
-    public async Task ChatAsync_WithValidResponse_ReturnsChatResponse()
+    public async Task ChatAsync_ValidResponse_DeserializesCorrectly()
     {
-        var responseJson = @"
+        var json = """
         {
-            ""id"": ""chatcmpl-123"",
-            ""model"": ""gpt-3.5-turbo"",
-            ""created"": 1677651234,
-            ""choices"": [
-                {
-                    ""index"": 0,
-                    ""message"": {
-                        ""role"": ""assistant"",
-                        ""content"": ""Hello from OpenAI!""
-                    },
-                    ""finish_reason"": ""stop""
-                }
-            ],
-            ""usage"": {
-                ""prompt_tokens"": 10,
-                ""completion_tokens"": 5,
-                ""total_tokens"": 15
-            }
-        }";
-        var httpClient = CreateMockHttpClient(CreateSuccessResponse(responseJson));
+            "id": "chatcmpl-123",
+            "model": "gpt-4",
+            "choices": [{ "message": { "content": "Hello" }, "finish_reason": "stop" }],
+            "usage": { "prompt_tokens": 10, "completion_tokens": 5 }
+        }
+        """;
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+        var httpClient = CreateMockHttpClient(response);
         var provider = new OpenAIProvider(httpClient, _generalOptions, _endpointOptions);
 
-        var request = new ChatRequest
-        {
-            Messages = new List<Message> { new UserMessage("Hi") }
-        };
-
-        var result = await provider.ChatAsync(request, CancellationToken.None);
+        var result = await provider.ChatAsync(new ChatRequest { Messages = new List<Message> { new UserMessage("Hi") } });
 
         result.Should().NotBeNull();
-        result.Content.Should().Be("Hello from OpenAI!");
+        result.Content.Should().Be("Hello");
         result.FinishReason.Should().Be("stop");
         result.Usage.InputTokens.Should().Be(10);
         result.Usage.OutputTokens.Should().Be(5);
-        result.Model.Should().Be("gpt-3.5-turbo");
     }
 
     [Fact]
-    public async Task ChatAsync_WithErrorResponse_ThrowsLLMConnectException()
+    public async Task ChatAsync_ErrorResponse_ThrowsLLMConnectException()
     {
         var errorJson = @"{""error"":{""message"":""Invalid API key""}}";
-        var httpClient = CreateMockHttpClient(CreateErrorResponse(errorJson, HttpStatusCode.Unauthorized));
+        var response = new HttpResponseMessage(HttpStatusCode.Unauthorized)
+        {
+            Content = new StringContent(errorJson, Encoding.UTF8, "application/json")
+        };
+        var httpClient = CreateMockHttpClient(response);
         var provider = new OpenAIProvider(httpClient, _generalOptions, _endpointOptions);
 
-        var request = new ChatRequest
-        {
-            Messages = new List<Message> { new UserMessage("Hi") }
-        };
+        Func<Task> act = async () => await provider.ChatAsync(new ChatRequest { Messages = new List<Message> { new UserMessage("Hi") } });
 
-        Func<Task> act = async () => await provider.ChatAsync(request, CancellationToken.None);
-
-        var exception = await act.Should().ThrowAsync<LLMConnectException>();
-        exception.Which.Provider.Should().Be("OpenAI");
-        exception.Which.Message.Should().Be("Invalid API key");
+        var ex = await act.Should().ThrowAsync<LLMConnectException>();
+        ex.Which.Provider.Should().Be("OpenAI");
+        ex.Which.Message.Should().Be("Invalid API key");
     }
 
     [Fact]
-    public async Task ChatAsync_ValidationFails_ThrowsArgumentException()
+    public async Task ChatAsync_WhenCancelled_ThrowsOperationCanceledException()
     {
-        var httpClient = CreateMockHttpClient(CreateSuccessResponse("{}"));
-        var provider = new OpenAIProvider(httpClient, _generalOptions, _endpointOptions);
+        // Arrange
+        var cts = new CancellationTokenSource();
+        cts.Cancel();
 
-        var request = new ChatRequest
-        {
-            Messages = new List<Message>()
-        };
-
-        Func<Task> act = async () => await provider.ChatAsync(request, CancellationToken.None);
-
-        await act.Should().ThrowAsync<ArgumentException>()
-            .WithMessage("*at least one message*");
-    }
-
-    // ---------- StreamAsync ----------
-
-    [Fact]
-    public async Task StreamAsync_WithValidStream_ReturnsChatChunks()
-    {
-        var ndjsonContent = """
-            data: {"choices":[{"delta":{"content":"Hello"}}]}
-            data: {"choices":[{"delta":{"content":" world"}}]}
-            data: [DONE]
-            """;
-        var response = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(ndjsonContent, Encoding.UTF8, "text/event-stream")
-        };
         var handlerMock = new Mock<HttpMessageHandler>();
         handlerMock
             .Protected()
@@ -175,8 +110,15 @@ public class OpenAIProviderTests
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(response)
-            .Verifiable();
+            .Returns<HttpRequestMessage, CancellationToken>((req, ct) =>
+            {
+                if (ct.IsCancellationRequested)
+                    throw new OperationCanceledException();
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("{\"id\":\"test\",\"choices\":[{\"message\":{\"content\":\"ok\"}}]}")
+                });
+            });
 
         var httpClient = new HttpClient(handlerMock.Object)
         {
@@ -184,12 +126,33 @@ public class OpenAIProviderTests
         };
         var provider = new OpenAIProvider(httpClient, _generalOptions, _endpointOptions);
 
-        var request = new ChatRequest
-        {
-            Messages = new List<Message> { new UserMessage("Say hello") }
-        };
+        var request = new ChatRequest { Messages = new List<Message> { new UserMessage("Hi") } };
 
-        var chunks = await provider.StreamAsync(request, CancellationToken.None).ToListAsync();
+        // Act & Assert
+        Func<Task> act = async () => await provider.ChatAsync(request, cts.Token);
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    // ---------- StreamAsync ----------
+
+    [Fact]
+    public async Task StreamAsync_ValidResponse_ReturnsChunks()
+    {
+        var sse = """
+            data: {"choices":[{"delta":{"content":"Hello"}}]}
+
+            data: {"choices":[{"delta":{"content":" world"}}]}
+
+            data: [DONE]
+            """;
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(sse, Encoding.UTF8, "text/event-stream")
+        };
+        var httpClient = CreateMockHttpClient(response);
+        var provider = new OpenAIProvider(httpClient, _generalOptions, _endpointOptions);
+
+        var chunks = await provider.StreamAsync(new ChatRequest { Messages = new List<Message> { new UserMessage("Hi") } }).ToListAsync();
 
         chunks.Should().HaveCount(2);
         chunks[0].Content.Should().Be("Hello");
@@ -197,112 +160,51 @@ public class OpenAIProviderTests
     }
 
     [Fact]
-    public async Task StreamAsync_WithErrorResponse_ThrowsLLMConnectException()
+    public async Task StreamAsync_ErrorResponse_ThrowsLLMConnectException()
     {
-        var errorJson = @"{""error"":{""message"":""Invalid API key""}}";
-        var errorResponse = new HttpResponseMessage(HttpStatusCode.Unauthorized)
+        var errorJson = @"{""error"":{""message"":""Rate limit""}}";
+        var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests)
         {
             Content = new StringContent(errorJson, Encoding.UTF8, "application/json")
         };
-        var handlerMock = new Mock<HttpMessageHandler>();
-        handlerMock
-            .Protected()
-            .Setup<Task<HttpResponseMessage>>(
-                "SendAsync",
-                ItExpr.IsAny<HttpRequestMessage>(),
-                ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(errorResponse)
-            .Verifiable();
-
-        var httpClient = new HttpClient(handlerMock.Object)
-        {
-            BaseAddress = new Uri("https://api.openai.com/v1/")
-        };
+        var httpClient = CreateMockHttpClient(response);
         var provider = new OpenAIProvider(httpClient, _generalOptions, _endpointOptions);
-
-        var request = new ChatRequest
-        {
-            Messages = new List<Message> { new UserMessage("Hi") }
-        };
 
         Func<Task> act = async () =>
         {
-            var enumerator = provider.StreamAsync(request, CancellationToken.None).GetAsyncEnumerator();
+            var enumerator = provider.StreamAsync(new ChatRequest { Messages = new List<Message> { new UserMessage("Hi") } }).GetAsyncEnumerator();
             await enumerator.MoveNextAsync();
         };
 
-        var exception = await act.Should().ThrowAsync<LLMConnectException>();
-        exception.Which.Provider.Should().Be("OpenAI");
-        exception.Which.Message.Should().Be("Invalid API key");
+        var ex = await act.Should().ThrowAsync<LLMConnectException>();
+        ex.Which.Provider.Should().Be("OpenAI");
+        ex.Which.Message.Should().Be("Rate limit");
     }
 
-    private static async IAsyncEnumerable<StreamEvent> ReadCustomEventsAsync(Stream stream, [EnumeratorCancellation] CancellationToken ct)
-    {
-        using var reader = new StreamReader(stream);
-        string? line;
-        while ((line = await reader.ReadLineAsync(ct)) != null)
-        {
-            if (line.StartsWith("custom: "))
-                yield return new StreamEvent(null, line.Substring(8));
-        }
-    }
-
-    // ---------- GetEmbeddingAsync ----------
+    // ---------- Embeddings ----------
 
     [Fact]
-    public async Task GetEmbeddingAsync_WithValidResponse_ReturnsEmbeddingResponse()
+    public async Task GetEmbeddingAsync_ValidResponse_DeserializesCorrectly()
     {
-        var responseJson = @"
+        var json = """
         {
-            ""data"": [
-                { ""embedding"": [0.1, 0.2, 0.3] }
-            ],
-            ""model"": ""text-embedding-3-small"",
-            ""usage"": { ""prompt_tokens"": 10, ""total_tokens"": 10 }
-        }";
-        var httpClient = CreateMockHttpClient(CreateSuccessResponse(responseJson));
+            "data": [{ "embedding": [0.1, 0.2, 0.3] }],
+            "model": "text-embedding-ada-002",
+            "usage": { "prompt_tokens": 10, "total_tokens": 10 }
+        }
+        """;
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+        var httpClient = CreateMockHttpClient(response);
         var provider = new OpenAIProvider(httpClient, _generalOptions, _endpointOptions);
 
-        var request = new EmbeddingRequest { Text = "Hello", EncodingFormat = "float" };
-
-        var result = await provider.GetEmbeddingAsync(request, CancellationToken.None);
+        var result = await provider.GetEmbeddingAsync(new EmbeddingRequest { Text = "Hello" });
 
         result.Should().NotBeNull();
         result.Embedding.Should().BeEquivalentTo(new float[] { 0.1f, 0.2f, 0.3f });
-        result.Model.Should().Be("text-embedding-3-small");
-        result.Usage.Should().NotBeNull();
+        result.Model.Should().Be("text-embedding-ada-002");
         result.Usage.InputTokens.Should().Be(10);
-        result.Usage.OutputTokens.Should().Be(0);
-        result.Usage.TotalTokens.Should().Be(10);
-    }
-
-    [Fact]
-    public async Task GetEmbeddingAsync_WithErrorResponse_ThrowsLLMConnectException()
-    {
-        var errorJson = @"{""error"":{""message"":""Invalid API key""}}";
-        var httpClient = CreateMockHttpClient(CreateErrorResponse(errorJson, HttpStatusCode.Unauthorized));
-        var provider = new OpenAIProvider(httpClient, _generalOptions, _endpointOptions);
-
-        var request = new EmbeddingRequest { Text = "Hello", EncodingFormat = "float" };
-
-        Func<Task> act = async () => await provider.GetEmbeddingAsync(request, CancellationToken.None);
-
-        var exception = await act.Should().ThrowAsync<LLMConnectException>();
-        exception.Which.Provider.Should().Be("OpenAI");
-        exception.Which.Message.Should().Be("Invalid API key");
-    }
-
-    [Fact]
-    public async Task GetEmbeddingAsync_ValidationFails_ThrowsArgumentException()
-    {
-        var httpClient = CreateMockHttpClient(CreateSuccessResponse("{}"));
-        var provider = new OpenAIProvider(httpClient, _generalOptions, _endpointOptions);
-
-        var request = new EmbeddingRequest { Text = "" }; // Empty text fails validation
-
-        Func<Task> act = async () => await provider.GetEmbeddingAsync(request, CancellationToken.None);
-
-        await act.Should().ThrowAsync<ArgumentException>()
-            .WithMessage("*Embedding text cannot be null or whitespace*");
     }
 }

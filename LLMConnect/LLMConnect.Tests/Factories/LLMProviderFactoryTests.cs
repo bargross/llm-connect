@@ -149,4 +149,30 @@ public class LLMProviderFactoryTests
         configuredClient.BaseAddress.Should().NotBeNull();
         configuredClient.BaseAddress!.ToString().Should().Be("https://api.openai.com/v1/");
     }
+
+    [Fact]
+    public void CreateProvider_ForAzureOpenAI_ReturnsAzureOpenAIProvider()
+    {
+        // Arrange
+        var httpClient = new HttpClient();
+        var generalOptions = new LLMConnectGeneralOptions
+        {
+            Provider = ProviderType.AzureOpenAI,
+            ApiKey = "test-key",
+            LoggerFactory = _loggerFactoryMock.Object,
+            DefaultModel = "gpt-4"
+        };
+        var endpointOptions = new LLMConnectEndpointOptions
+        {
+            AzureResourceName = "my-resource",
+            AzureDeploymentName = "my-deployment",
+            AzureApiVersion = "2024-02-15-preview"
+        };
+
+        // Act
+        var (_, provider) = new LLMProviderFactory(generalOptions, endpointOptions, httpClient).CreateProvider();
+
+        // Assert
+        provider.Should().BeOfType<AzureOpenAIProvider>();
+    }
 }

@@ -3,6 +3,8 @@ using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Moq.Protected;
+using System.Net;
 using System.Reflection;
 
 namespace LLMConnect.Tests.Clients;
@@ -11,6 +13,8 @@ public class LLMConnectClientTests
 {
     private readonly Mock<ILogger> _loggerMock;
     private readonly Mock<ILoggerFactory> _loggerFactoryMock;
+    private readonly LLMConnectGeneralOptions _generalOptions;
+    private readonly LLMConnectEndpointOptions _endpointOptions;
 
     public LLMConnectClientTests()
     {
@@ -19,6 +23,18 @@ public class LLMConnectClientTests
         _loggerFactoryMock
             .Setup(x => x.CreateLogger(It.IsAny<string>()))
             .Returns(_loggerMock.Object);
+
+        _generalOptions = new LLMConnectGeneralOptions
+        {
+            Provider = ProviderType.OpenAI,
+            ApiKey = "test-key",
+            LoggerFactory = _loggerFactoryMock.Object,
+            DefaultModel = "gpt-4",
+            MaxRetries = 3,
+            Timeout = TimeSpan.FromSeconds(30)
+        };
+
+        _endpointOptions = new LLMConnectEndpointOptions();
     }
 
     private T? GetPrivateField<T>(object obj, string fieldName)
@@ -33,24 +49,30 @@ public class LLMConnectClientTests
         field?.SetValue(obj, value);
     }
 
+    // Private helper – unique name to avoid ambiguity
+    private HttpClient CreateMockHttpClientForClient(HttpResponseMessage response)
+    {
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(response);
+        return new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("https://api.openai.com/v1/")
+        };
+    }
+
     // ---------- Constructors ----------
 
     [Fact]
     public void Constructor_WithOptionsOnly_CreatesHttpClientAndOwnsIt()
     {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.OpenAI,
-            ApiKey = "test-key",
-            LoggerFactory = _loggerFactoryMock.Object,
-            MaxRetries = 3
-        };
+        var client = new LLMConnectClient(_generalOptions, _endpointOptions);
 
-        // Act
-        var client = new LLMConnectClient(options);
-
-        // Assert
         var ownsHttpClient = GetPrivateField<bool>(client, "_ownsHttpClient");
         ownsHttpClient.Should().BeTrue();
 
@@ -61,40 +83,22 @@ public class LLMConnectClientTests
     [Fact]
     public void Constructor_WithOptionsOnly_CreatesLogger()
     {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.OpenAI,
-            ApiKey = "test-key",
-            LoggerFactory = _loggerFactoryMock.Object
-        };
+        var client = new LLMConnectClient(_generalOptions, _endpointOptions);
 
-        // Act
-        var client = new LLMConnectClient(options);
-
-        // Assert
         var logger = GetPrivateField<ILogger<LLMConnectClient>>(client, "_logger");
         logger.Should().NotBeNull();
 
-        _loggerFactoryMock.Verify(x => x.CreateLogger(It.Is<string>(s => s == typeof(LLMConnectClient).FullName)), Times.Once);
+        _loggerFactoryMock.Verify(
+            x => x.CreateLogger(It.Is<string>(s => s == typeof(LLMConnectClient).FullName)),
+            Times.Once);
     }
 
     [Fact]
     public void Constructor_WithHttpClient_DoesNotOwnClient()
     {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.OpenAI,
-            ApiKey = "test-key",
-            LoggerFactory = _loggerFactoryMock.Object
-        };
         var httpClient = new HttpClient();
+        var client = new LLMConnectClient(_generalOptions, _endpointOptions, httpClient);
 
-        // Act
-        var client = new LLMConnectClient(options, httpClient);
-
-        // Assert
         var ownsHttpClient = GetPrivateField<bool>(client, "_ownsHttpClient");
         ownsHttpClient.Should().BeFalse();
 
@@ -103,21 +107,11 @@ public class LLMConnectClientTests
     }
 
     [Fact]
-    public void Constructor_WithHttpClient_LogsWarning()
+    public void Constructor_WithHttpClient_DoesNotLogWarning()
     {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.OpenAI,
-            ApiKey = "test-key",
-            LoggerFactory = _loggerFactoryMock.Object
-        };
         var httpClient = new HttpClient();
+        var client = new LLMConnectClient(_generalOptions, _endpointOptions, httpClient);
 
-        // Act
-        var client = new LLMConnectClient(options, httpClient);
-
-        // Assert
         _loggerMock.Verify(
             x => x.Log(
                 LogLevel.Warning,
@@ -125,29 +119,20 @@ public class LLMConnectClientTests
                 It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Using a user-supplied HttpClient")),
                 null,
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-            Times.Once);
+            Times.Never);
     }
 
     [Fact]
     public void Constructor_WithHttpClientFactory_CreatesClientAndOwnsIt()
     {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.OpenAI,
-            ApiKey = "test-key",
-            LoggerFactory = _loggerFactoryMock.Object
-        };
         var httpClientFactoryMock = new Mock<IHttpClientFactory>();
         var expectedClient = new HttpClient();
         httpClientFactoryMock
             .Setup(x => x.CreateClient("LLMConnect"))
             .Returns(expectedClient);
 
-        // Act
-        var client = new LLMConnectClient(options, httpClientFactoryMock.Object);
+        var client = new LLMConnectClient(_generalOptions, _endpointOptions, httpClientFactoryMock.Object);
 
-        // Assert
         var ownsHttpClient = GetPrivateField<bool>(client, "_ownsHttpClient");
         ownsHttpClient.Should().BeTrue();
 
@@ -155,32 +140,37 @@ public class LLMConnectClientTests
         clientHttpClient.Should().BeSameAs(expectedClient);
     }
 
+    [Fact]
+    public void Constructor_WithNullGeneralOptions_ThrowsArgumentNullException()
+    {
+        Action act = () => new LLMConnectClient(null!, _endpointOptions);
+        act.Should().Throw<ArgumentNullException>()
+            .WithParameterName("generalOptions");
+    }
+
+    [Fact]
+    public void Constructor_WithNullEndpointOptions_ThrowsArgumentNullException()
+    {
+        Action act = () => new LLMConnectClient(_generalOptions, null!);
+        act.Should().Throw<ArgumentNullException>()
+            .WithParameterName("endpointOptions");
+    }
+
     // ---------- Dispose ----------
 
     [Fact]
     public async void Dispose_WhenOwnsClient_DisposesHttpClient()
     {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.OpenAI,
-            ApiKey = "test-key",
-            LoggerFactory = _loggerFactoryMock.Object
-        };
-        var client = new LLMConnectClient(options);
+        var client = new LLMConnectClient(_generalOptions, _endpointOptions);
         var httpClient = client.HttpClient;
 
         httpClient.Should().NotBeNull();
 
-        // Act
         client.Dispose();
 
-        // Assert
-        // Check that the HttpClient is disposed by trying to call a method.
         var disposed = false;
         try
         {
-            // SendAsync will throw ObjectDisposedException if disposed.
             await httpClient!.SendAsync(new HttpRequestMessage(HttpMethod.Get, "http://example.com"));
         }
         catch (ObjectDisposedException)
@@ -194,26 +184,15 @@ public class LLMConnectClientTests
     [Fact]
     public void Dispose_WhenNotOwnsClient_DoesNotDisposeHttpClient()
     {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.OpenAI,
-            ApiKey = "test-key",
-            LoggerFactory = _loggerFactoryMock.Object
-        };
         var httpClient = new HttpClient();
-        var client = new LLMConnectClient(options, httpClient);
+        var client = new LLMConnectClient(_generalOptions, _endpointOptions, httpClient);
 
-        // Act
         client.Dispose();
 
-        // Assert
-        // The HttpClient should still be usable (not disposed).
-        // Accessing a property that would throw ObjectDisposedException proves it's still alive.
         var disposed = false;
         try
         {
-            var timeout = httpClient.Timeout; // or .BaseAddress, .DefaultRequestHeaders
+            var timeout = httpClient.Timeout;
         }
         catch (ObjectDisposedException)
         {
@@ -228,14 +207,7 @@ public class LLMConnectClientTests
     [Fact]
     public async Task ChatAsync_DelegatesToProvider()
     {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.OpenAI,
-            ApiKey = "test-key",
-            LoggerFactory = _loggerFactoryMock.Object
-        };
-        var client = new LLMConnectClient(options);
+        var client = new LLMConnectClient(_generalOptions, _endpointOptions);
 
         var mockProvider = new Mock<ILLMProvider>();
         var expectedResponse = new ChatResponse { Content = "Hello from mock" };
@@ -243,7 +215,6 @@ public class LLMConnectClientTests
             .Setup(x => x.ChatAsync(It.IsAny<ChatRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedResponse);
 
-        // Replace the private _provider field with the mock
         SetPrivateField(client, "_provider", mockProvider.Object);
 
         var request = new ChatRequest
@@ -251,10 +222,8 @@ public class LLMConnectClientTests
             Messages = new List<Message> { new UserMessage("Hi") }
         };
 
-        // Act
         var result = await client.ChatAsync(request);
 
-        // Assert
         result.Should().BeSameAs(expectedResponse);
         mockProvider.Verify(x => x.ChatAsync(request, It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -262,14 +231,7 @@ public class LLMConnectClientTests
     [Fact]
     public async Task StreamAsync_DelegatesToProvider()
     {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.OpenAI,
-            ApiKey = "test-key",
-            LoggerFactory = _loggerFactoryMock.Object
-        };
-        var client = new LLMConnectClient(options);
+        var client = new LLMConnectClient(_generalOptions, _endpointOptions);
 
         var mockProvider = new Mock<ILLMProvider>();
         var expectedChunks = new List<ChatChunk>
@@ -282,7 +244,6 @@ public class LLMConnectClientTests
             .Setup(x => x.StreamAsync(It.IsAny<ChatRequest>(), It.IsAny<CancellationToken>()))
             .Returns(asyncEnumerable);
 
-        // Replace the private _provider field with the mock
         SetPrivateField(client, "_provider", mockProvider.Object);
 
         var request = new ChatRequest
@@ -290,16 +251,34 @@ public class LLMConnectClientTests
             Messages = new List<Message> { new UserMessage("Hi") }
         };
 
-        // Act
         var result = client.StreamAsync(request);
 
-        // Assert
         result.Should().NotBeNull();
-        // Enumerate to verify it's the same enumerable
         var chunks = await result.ToListAsync();
         chunks.Should().HaveCount(2);
         chunks[0].Content.Should().Be("Hello");
         chunks[1].Content.Should().Be(" world");
         mockProvider.Verify(x => x.StreamAsync(request, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetEmbeddingAsync_DelegatesToProvider()
+    {
+        var client = new LLMConnectClient(_generalOptions, _endpointOptions);
+
+        var mockProvider = new Mock<ILLMProvider>();
+        var expectedResponse = new EmbeddingResponse { Embedding = new[] { 0.1f, 0.2f } };
+        mockProvider
+            .Setup(x => x.GetEmbeddingAsync(It.IsAny<EmbeddingRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedResponse);
+
+        SetPrivateField(client, "_provider", mockProvider.Object);
+
+        var request = new EmbeddingRequest { Text = "Hello" };
+
+        var result = await client.GetEmbeddingAsync(request);
+
+        result.Should().BeSameAs(expectedResponse);
+        mockProvider.Verify(x => x.GetEmbeddingAsync(request, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

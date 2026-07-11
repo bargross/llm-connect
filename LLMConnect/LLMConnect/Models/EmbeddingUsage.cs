@@ -1,6 +1,4 @@
-﻿
-
-namespace LLMConnect.Models;
+﻿namespace LLMConnect.Models;
 
 /// <summary>
 /// Represents the usage of tokens in an embedding request and response.

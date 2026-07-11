@@ -17,7 +17,6 @@ public class GoogleIntegrationTests : IntegrationTestBase
 
     public GoogleIntegrationTests() : base(ProviderType.Google) { }
 
-    // ---------- Stubs ----------
     private void StubChat(string responseJson, HttpStatusCode statusCode = HttpStatusCode.OK)
         => _server
             .Given(Request.Create().WithPath(ChatPath).UsingPost())
@@ -43,7 +42,13 @@ public class GoogleIntegrationTests : IntegrationTestBase
                 .WithBody(sb.ToString()));
     }
 
-    // ---------- Tests ----------
+    private void StubEmbeddings(string responseJson, HttpStatusCode statusCode = HttpStatusCode.OK)
+        => _server
+            .Given(Request.Create().WithPath(EmbedPath).UsingPost())
+            .RespondWith(Response.Create()
+                .WithStatusCode(statusCode)
+                .WithHeader("Content-Type", "application/json")
+                .WithBody(responseJson));
 
     [Fact]
     public async Task ChatAsync_ValidResponse_ReturnsChatResponse()
@@ -57,11 +62,100 @@ public class GoogleIntegrationTests : IntegrationTestBase
         StubChat(json);
 
         var result = await _client.ChatAsync(CreateChatRequest());
-
         result.Content.Should().Be("Hello from Google!");
         result.FinishReason.Should().Be("STOP");
         result.Usage.InputTokens.Should().Be(10);
         result.Usage.OutputTokens.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task ChatAsync_Error_ThrowsLLMConnectException()
+    {
+        StubChat(@"{""error"":{""message"":""Invalid API key""}}", HttpStatusCode.Unauthorized);
+
+        Func<Task> act = async () => await _client.ChatAsync(CreateChatRequest());
+        var ex = await act.Should().ThrowAsync<LLMConnectException>();
+        ex.Which.Provider.Should().Be("Google");
+        ex.Which.Message.Should().Be("Invalid API key");
+    }
+
+    [Fact]
+    public async Task ChatAsync_Retry_SucceedsAfter429()
+    {
+        StubRetryScenario(ChatPath, @"{""error"":{""message"":""Rate limit""}}", """
+        {
+            "candidates": [{ "content": { "parts": [{ "text": "Retry worked!" }] } }],
+            "usageMetadata": { "promptTokenCount": 5, "candidatesTokenCount": 2 }
+        }
+        """);
+
+        var result = await _client.ChatAsync(CreateChatRequest());
+        result.Content.Should().Be("Retry worked!");
+    }
+
+    [Fact]
+    public async Task ChatAsync_WithTools_ReturnsToolCalls()
+    {
+        var tool = new Tool
+        {
+            Name = "get_weather",
+            Description = "Get the weather for a location",
+            Parameters = new Dictionary<string, JsonSchema> { ["location"] = new JsonSchema { Type = "string" } }
+        };
+        var json = """
+        {
+            "candidates": [{
+                "content": { "parts": [{ "functionCall": { "name": "get_weather", "args": { "location": "Boston" } } }] },
+                "finishReason": "STOP"
+            }]
+        }
+        """;
+        StubChat(json);
+
+        var request = new ChatRequest
+        {
+            Messages = new List<Message> { new UserMessage("Weather?") },
+            Tools = new List<Tool> { tool }
+        };
+        var response = await _client.ChatAsync(request);
+        response.ToolCalls.Should().HaveCount(1);
+        var tc = response.ToolCalls[0];
+        tc.Name.Should().Be("get_weather");
+        tc.Arguments["location"].ToString().Should().Be("Boston");
+        response.FinishReason.Should().Be("STOP");
+    }
+
+    [Fact]
+    public async Task ChatAsync_WithToolChoiceRequired_SendsCorrectJson()
+    {
+        // Use a regex matcher to match any model in the path
+        _server
+            .Given(Request.Create()
+                .WithPath(new WireMock.Matchers.RegexMatcher("/v1beta/models/.*:generateContent"))
+                .UsingPost())
+            .RespondWith(Response.Create()
+                .WithStatusCode(HttpStatusCode.OK)
+                .WithBody("{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"ok\"}]}}]}"));
+
+        var tool = new Tool
+        {
+            Name = "get_weather",
+            Description = "Get the weather for a location",
+            Parameters = new Dictionary<string, JsonSchema> { ["location"] = new JsonSchema { Type = "string" } }
+        };
+        var request = new ChatRequest
+        {
+            Messages = new List<Message> { new UserMessage("Hi") },
+            Tools = new List<Tool> { tool },
+            ToolChoice = "required"
+        };
+
+        await _client.ChatAsync(request);
+
+        var logEntries = _server.LogEntries;
+        var requestLog = logEntries.Should().ContainSingle().Subject;
+        var body = requestLog.RequestMessage.Body?.ToString() ?? string.Empty;
+        body.Should().Contain("\"toolConfig\":{\"function_calling_config\":{\"mode\":\"ANY\"}}");
     }
 
     [Fact]
@@ -73,11 +167,9 @@ public class GoogleIntegrationTests : IntegrationTestBase
             @"{""candidates"":[{""content"":{""parts"":[{""text"":"" world""}]}}]}",
             @"{""candidates"":[{""finishReason"":""STOP""}]}"
         };
-
         StubStream(chunks);
 
         var result = await _client.StreamAsync(CreateChatRequest()).ToListAsync();
-
         result.Should().HaveCount(3);
         result[0].Content.Should().Be("Hello");
         result[1].Content.Should().Be(" world");
@@ -86,32 +178,20 @@ public class GoogleIntegrationTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task ChatAsync_Error_ThrowsLLMConnectException()
-    {
-        StubChat(@"{""error"":{""message"":""Invalid API key""}}", HttpStatusCode.Unauthorized);
-
-        Func<Task> act = async () => await _client.ChatAsync(CreateChatRequest());
-
-        var ex = await act.Should().ThrowAsync<LLMConnectException>();
-        ex.Which.Provider.Should().Be("Google");
-        ex.Which.Message.Should().Be("Invalid API key");
-    }
-
-    [Fact]
-    public async Task ChatAsync_Retry_SucceedsAfter429()
+    public async Task StreamAsync_Retry_SucceedsAfter429()
     {
         var fail = @"{""error"":{""message"":""Rate limit""}}";
-        var success = """
-        {
-            "candidates": [{ "content": { "parts": [{ "text": "Retry worked!" }] } }],
-            "usageMetadata": { "promptTokenCount": 5, "candidatesTokenCount": 2 }
-        }
-        """;
-        StubRetryScenario(ChatPath, fail, success);
+        var success = "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"Retry\"}]}}]}\n";
+        StubRetryScenario(
+            StreamPath,
+            fail,
+            success,
+            configureRequest: req => req.WithParam("alt", "sse")
+        );
 
-        var result = await _client.ChatAsync(CreateChatRequest());
-
-        result.Content.Should().Be("Retry worked!");
+        var result = await _client.StreamAsync(CreateChatRequest()).ToListAsync();
+        result.Should().HaveCount(1);
+        result[0].Content.Should().Be("Retry");
     }
 
     [Fact]
@@ -122,19 +202,21 @@ public class GoogleIntegrationTests : IntegrationTestBase
             "embedding": { "values": [0.5, 0.6, 0.7] }
         }
         """;
-
-        _server
-            .Given(Request.Create().WithPath(EmbedPath).UsingPost())
-            .RespondWith(Response.Create()
-                .WithStatusCode(HttpStatusCode.OK)
-                .WithHeader("Content-Type", "application/json")
-                .WithBody(json));
+        StubEmbeddings(json);
 
         var result = await _client.GetEmbeddingAsync(CreateEmbeddingRequest());
-
-        result.Should().NotBeNull();
         result.Embedding.Should().BeEquivalentTo(new float[] { 0.5f, 0.6f, 0.7f });
         result.Model.Should().Be("google");
-        result.Usage.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task EmbeddingsAsync_Error_ThrowsLLMConnectException()
+    {
+        StubEmbeddings(@"{""error"":{""message"":""Invalid input""}}", HttpStatusCode.BadRequest);
+
+        Func<Task> act = async () => await _client.GetEmbeddingAsync(CreateEmbeddingRequest());
+        var ex = await act.Should().ThrowAsync<LLMConnectException>();
+        ex.Which.Provider.Should().Be("Google");
+        ex.Which.Message.Should().Be("Invalid input");
     }
 }

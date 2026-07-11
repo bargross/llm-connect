@@ -13,24 +13,26 @@ internal class LLMProviderFactory
 
     public LLMProviderFactory(LLMConnectGeneralOptions? generalOpts, LLMConnectEndpointOptions? endpointOpts, HttpClient httpClient)
     {
-        _generalOpts = generalOpts ?? throw new ArgumentNullException(nameof(generalOpts));
-        _endpointOpts = endpointOpts ?? throw new ArgumentNullException(nameof(endpointOpts));
+        OptionsValidator.Validate(generalOpts, endpointOpts, _logger);
+
         _providedClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        
+        _generalOpts = generalOpts;
+        _endpointOpts = endpointOpts;
 
         _logger = generalOpts.LoggerFactory?.CreateLogger<LLMProviderFactory>();
-
-        OptionsValidator.Validate(generalOpts, endpointOpts, _logger);
     }
 
     public LLMProviderFactory(LLMConnectGeneralOptions? generalOpts, LLMConnectEndpointOptions? endpointOpts, IHttpClientFactory httpClientFactory)
     {
-        _generalOpts = generalOpts ?? throw new ArgumentNullException(nameof(generalOpts));
-        _endpointOpts = endpointOpts ?? throw new ArgumentNullException(nameof(endpointOpts));
+        OptionsValidator.Validate(generalOpts, endpointOpts, _logger);
+
         _providedClient = httpClientFactory?.CreateClient("LLMConnect") ?? throw new InvalidOperationException("Failed to create HttpClient from factory.");
+        
+        _generalOpts = generalOpts;
+        _endpointOpts = endpointOpts;
 
         _logger = generalOpts.LoggerFactory?.CreateLogger<LLMProviderFactory>();
-
-        OptionsValidator.Validate(generalOpts, endpointOpts, _logger);
     }
 
     public (HttpClient, ILLMProvider) CreateProvider()

@@ -125,13 +125,21 @@ public abstract class IntegrationTestBase : IDisposable
     /// Stubs a retry scenario: the first request fails, the second succeeds.
     /// The path should match the relative path the client will request.
     /// </summary>
-    protected void StubRetryScenario(string path, string failResponse, string successResponse,
-        HttpStatusCode failStatusCode = HttpStatusCode.TooManyRequests)
+    protected void StubRetryScenario(
+        string path,
+        string failResponse,
+        string successResponse,
+        HttpStatusCode failStatusCode = HttpStatusCode.TooManyRequests,
+        Action<IRequestBuilder>? configureRequest = null)
     {
         var scenario = "retry_scenario_" + Guid.NewGuid().ToString("N");
 
+        // First stub (fails)
+        var requestBuilder = Request.Create().WithPath(path).UsingPost();
+        configureRequest?.Invoke(requestBuilder);
+
         _server
-            .Given(Request.Create().WithPath(path).UsingPost())
+            .Given(requestBuilder)
             .InScenario(scenario)
             .WillSetStateTo("retried")
             .RespondWith(Response.Create()
@@ -139,8 +147,12 @@ public abstract class IntegrationTestBase : IDisposable
                 .WithHeader("Content-Type", "application/json")
                 .WithBody(failResponse));
 
+        // Second stub (succeeds)
+        var requestBuilder2 = Request.Create().WithPath(path).UsingPost();
+        configureRequest?.Invoke(requestBuilder2);
+
         _server
-            .Given(Request.Create().WithPath(path).UsingPost())
+            .Given(requestBuilder2)
             .InScenario(scenario)
             .WhenStateIs("retried")
             .RespondWith(Response.Create()

@@ -20,7 +20,7 @@ public class AnthropicChatRequestValidatorTests
     public void Validate_WhenResponseFormatIsProvided_LogsWarning()
     {
         // Arrange
-        var request = new ChatRequest
+        var request = new Models.ChatRequest
         {
             Messages = new List<Message> { new UserMessage("Hello") },
             ResponseFormat = "json_object"
@@ -47,7 +47,7 @@ public class AnthropicChatRequestValidatorTests
     public void Validate_WhenSeedIsProvided_LogsWarning()
     {
         // Arrange
-        var request = new ChatRequest
+        var request = new Models.ChatRequest
         {
             Messages = new List<Message> { new UserMessage("Hello") },
             Seed = 42
@@ -74,7 +74,7 @@ public class AnthropicChatRequestValidatorTests
     public void Validate_WhenBothResponseFormatAndSeedAreProvided_LogsBothWarnings()
     {
         // Arrange
-        var request = new ChatRequest
+        var request = new Models.ChatRequest
         {
             Messages = new List<Message> { new UserMessage("Hello") },
             ResponseFormat = "json_object",
@@ -110,7 +110,7 @@ public class AnthropicChatRequestValidatorTests
     public void Validate_WhenRequestIsValid_LogsInformation()
     {
         // Arrange
-        var request = new ChatRequest
+        var request = new Models.ChatRequest
         {
             Messages = new List<Message> { new UserMessage("Hello") },
             Temperature = 0.5f,
@@ -138,7 +138,7 @@ public class AnthropicChatRequestValidatorTests
     public void Validate_WhenLoggerIsNull_DoesNotThrow()
     {
         // Arrange
-        var request = new ChatRequest
+        var request = new Models.ChatRequest
         {
             Messages = new List<Message> { new UserMessage("Hello") },
             ResponseFormat = "json_object",
@@ -156,7 +156,7 @@ public class AnthropicChatRequestValidatorTests
     public void Validate_WhenBaseValidationFails_ThrowsArgumentException_BeforeProviderSpecificValidation()
     {
         // Arrange
-        var request = new ChatRequest
+        var request = new Models.ChatRequest
         {
             Messages = new List<Message>(), // Empty messages — base validation fails
             ResponseFormat = "json_object", // Would log a warning, but base fails first
@@ -168,7 +168,7 @@ public class AnthropicChatRequestValidatorTests
 
         // Assert
         act.Should().Throw<ArgumentException>()
-            .WithParameterName(nameof(ChatRequest.Messages));
+            .WithParameterName(nameof(Models.ChatRequest.Messages));
 
         // Provider-specific warnings should NOT be logged because base validation threw
         _loggerMock.Verify(l => l.Log(

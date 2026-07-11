@@ -16,34 +16,42 @@ internal class OllamaStreamChunkParser : ChunkParserBase<OllamaStreamChunkParser
 
         try
         {
-            var chunk = JsonSerializer.Deserialize<OllamaStreamChunk>(evt.Data);
-            if (chunk != null)
+            var chunk = JsonSerializer.Deserialize<OllamaChatResponse>(evt.Data);
+            if (chunk == null)
+                return null;
+
+            var result = new ChatChunk();
+
+            if (chunk.Message?.Content is string content && !string.IsNullOrEmpty(content))
+                result.Content = content;
+
+            if (chunk.Message?.ToolCalls != null && chunk.Message.ToolCalls.Any())
             {
-                // If the chunk has content, yield it
-                if (chunk.Message?.Content is string content && !string.IsNullOrEmpty(content))
-                {
-                    return new ChatChunk
+                result.ToolCalls = chunk.Message.ToolCalls
+                    .Select((tc, idx) => new ToolCallDelta
                     {
-                        Content = content,
-                        IsComplete = chunk.Done ?? false
-                    };
-                }
-                // If the chunk is marked as done, yield a completion chunk
-                if (chunk.Done == true)
-                {
-                    return new ChatChunk
-                    {
-                        Content = string.Empty,
-                        IsComplete = true
-                    };
-                }
+                        Index = idx,
+                        Id = tc.Function?.Name,
+                        Name = tc.Function?.Name,
+                        ArgumentsDelta = tc.Function?.Arguments != null
+                            ? JsonSerializer.Serialize(tc.Function.Arguments)
+                            : null
+                    })
+                    .ToList();
             }
+
+            if (chunk.Done)
+            {
+                result.IsComplete = true;
+                result.FinishReason = chunk.DoneReason ?? "stop";
+            }
+
+            return result;
         }
         catch (JsonException ex)
         {
-            _logger?.LogInformation($"Ignoring malformed chunks, reason: {ex.Message}");
+            _logger?.LogInformation($"Ignoring malformed chunk, reason: {ex.Message}");
+            return null;
         }
-
-        return null;
     }
 }

@@ -18,35 +18,44 @@ internal class GoogleStreamChunkParser : ChunkParserBase<GoogleStreamChunkParser
         {
             var chunk = JsonSerializer.Deserialize<GoogleChatResponse>(evt.Data);
             var candidate = chunk?.Candidates?.FirstOrDefault();
-            var text = candidate?.Content?.Parts?.FirstOrDefault()?.Text;
+            if (candidate == null)
+                return null;
 
-            if (!string.IsNullOrEmpty(text))
+            var result = new ChatChunk();
+
+            var textPart = candidate.Content?.Parts?.FirstOrDefault(p => p.Text != null);
+            if (textPart?.Text is string text && !string.IsNullOrEmpty(text))
+                result.Content = text;
+
+            var functionPart = candidate.Content?.Parts?.FirstOrDefault(p => p.FunctionCall != null);
+            if (functionPart?.FunctionCall != null)
             {
-                return new ChatChunk
+                var fc = functionPart.FunctionCall;
+                var argsJson = JsonSerializer.Serialize(fc.Args);
+                result.ToolCalls = new List<ToolCallDelta>
                 {
-                    Content = text,
-                    IsComplete = false,
-                    FinishReason = null
+                    new ToolCallDelta
+                    {
+                        Index = 0,
+                        Id = fc.Name,
+                        Name = fc.Name,
+                        ArgumentsDelta = argsJson
+                    }
                 };
             }
 
-            // If this chunk contains a finishReason, yield the final chunk
-            if (candidate?.FinishReason != null)
+            if (!string.IsNullOrEmpty(candidate.FinishReason))
             {
-                return new ChatChunk
-                {
-                    Content = string.Empty,
-                    IsComplete = true,
-                    FinishReason = candidate.FinishReason
-                };
+                result.IsComplete = true;
+                result.FinishReason = candidate.FinishReason;
             }
+
+            return result;
         }
         catch (JsonException ex)
         {
-            _logger?.LogInformation($"Ignoring malformed chunks, reason: {ex.Message}");
-            // Ignore malformed chunks
+            _logger?.LogInformation($"Ignoring malformed chunk, reason: {ex.Message}");
+            return null;
         }
-
-        return null;
     }
 }

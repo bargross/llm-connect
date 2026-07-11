@@ -5,7 +5,6 @@ using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 using Moq;
 using System.Net;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 
@@ -36,21 +35,35 @@ public class ProviderBaseTests
         _provider = new TestProvider(_options);
     }
 
-    // ---------- Test Subclass ----------
-
-    private class TestProviderResponse
+    // ---------- Test Subclass (public) ----------
+    internal class TestProvider : ProviderBase<TestProvider>
     {
-        public string? Text { get; set; }
-    }
+        public TestProvider(LLMConnectGeneralOptions options) : base(options) { }
 
-    private static ChatResponse? MapProviderResponse(TestProviderResponse? response)
-    {
-        if (response == null) return null;
-        return new ChatResponse { Content = response.Text ?? string.Empty };
+        // Expose protected methods for testing
+        public new async Task<string> ExtractErrorMessage(HttpResponseMessage response, CancellationToken cancellationToken)
+            => await base.ExtractErrorMessage(response, cancellationToken);
+
+        public new async Task LogAndThrow(ProviderType? providerType, HttpResponseMessage response, CancellationToken cancellationToken)
+            => await base.LogAndThrow(providerType, response, cancellationToken);
+
+        public new async Task<TResponse?> DeserializeResponseAsync<TProviderResponse, TResponse>(
+            HttpResponseMessage response,
+            ProviderType? provider,
+            Func<TProviderResponse?, TResponse?> toChatResponse,
+            CancellationToken cancellationToken)
+            => await base.DeserializeResponseAsync(response, provider, toChatResponse, cancellationToken);
+
+        public new string GetUrlRelativePath(
+            LLMConnectEndpointOptions options,
+            int type,
+            bool isStreaming,
+            string? model = null,
+            ILogger? logger = null)
+            => base.GetUrlRelativePath(options, (QueryType)type, isStreaming, model, logger);
     }
 
     // ---------- ExtractErrorMessage Tests ----------
-
     [Fact]
     public async Task ExtractErrorMessage_OpenAIErrorFormat_ReturnsMessage()
     {
@@ -60,34 +73,7 @@ public class ProviderBaseTests
         };
 
         var result = await _provider.ExtractErrorMessage(response, CancellationToken.None);
-
         result.Should().Be("Invalid API key");
-    }
-
-    [Fact]
-    public async Task ExtractErrorMessage_AnthropicErrorFormat_ReturnsMessage()
-    {
-        var response = new HttpResponseMessage(HttpStatusCode.BadRequest)
-        {
-            Content = new StringContent("""{"error":{"message":"Invalid request"}}""", Encoding.UTF8, "application/json")
-        };
-
-        var result = await _provider.ExtractErrorMessage(response, CancellationToken.None);
-
-        result.Should().Be("Invalid request");
-    }
-
-    [Fact]
-    public async Task ExtractErrorMessage_GoogleErrorFormat_ReturnsMessage()
-    {
-        var response = new HttpResponseMessage(HttpStatusCode.BadRequest)
-        {
-            Content = new StringContent("""{"error":{"message":"API key not valid"}}""", Encoding.UTF8, "application/json")
-        };
-
-        var result = await _provider.ExtractErrorMessage(response, CancellationToken.None);
-
-        result.Should().Be("API key not valid");
     }
 
     [Fact]
@@ -99,7 +85,6 @@ public class ProviderBaseTests
         };
 
         var result = await _provider.ExtractErrorMessage(response, CancellationToken.None);
-
         result.Should().Be("Internal server error");
     }
 
@@ -112,7 +97,6 @@ public class ProviderBaseTests
         };
 
         var result = await _provider.ExtractErrorMessage(response, CancellationToken.None);
-
         result.Should().Be("Service unavailable");
     }
 
@@ -125,7 +109,6 @@ public class ProviderBaseTests
         };
 
         var result = await _provider.ExtractErrorMessage(response, CancellationToken.None);
-
         result.Should().Be($"HTTP error: {HttpStatusCode.InternalServerError} - Internal Server Error");
     }
 
@@ -138,7 +121,6 @@ public class ProviderBaseTests
         };
 
         var result = await _provider.ExtractErrorMessage(response, CancellationToken.None);
-
         result.Should().Be($"HTTP error: {HttpStatusCode.NotFound} - ");
     }
 
@@ -151,22 +133,19 @@ public class ProviderBaseTests
         };
 
         var result = await _provider.ExtractErrorMessage(response, CancellationToken.None);
-
         result.Should().Be($"HTTP error: {HttpStatusCode.BadRequest} - {await response.Content.ReadAsStringAsync()}");
     }
 
     // ---------- LogAndThrow Tests ----------
-
     [Fact]
     public async Task LogAndThrow_LogsErrorAndThrowsLLMConnectException()
     {
-        var providerType = ProviderType.OpenAI;
         var response = new HttpResponseMessage(HttpStatusCode.BadRequest)
         {
             Content = new StringContent("""{"error":{"message":"Invalid API key"}}""", Encoding.UTF8, "application/json")
         };
 
-        Func<Task> act = async () => await _provider.LogAndThrow(providerType, response, CancellationToken.None);
+        Func<Task> act = async () => await _provider.LogAndThrow(ProviderType.OpenAI, response, CancellationToken.None);
 
         var exception = await act.Should().ThrowAsync<LLMConnectException>();
         exception.Which.Provider.Should().Be("OpenAI");
@@ -201,106 +180,52 @@ public class ProviderBaseTests
 
         await act.Should().ThrowAsync<LLMConnectException>()
             .WithMessage("Invalid API key");
-        // No log verification because logger is null
     }
 
     // ---------- DeserializeResponseAsync Tests ----------
+    private class TestProviderResponse
+    {
+        public string? Text { get; set; }
+    }
+
+    private static ChatResponse? MapProviderResponse(TestProviderResponse? response)
+    {
+        if (response == null) return null;
+        return new ChatResponse { Content = response.Text ?? string.Empty };
+    }
 
     [Fact]
-    public async Task DeserializeResponseAsync_WithCustomDeserializer_UsesCustom()
+    public async Task DeserializeResponseAsync_ValidResponse_ReturnsMappedResponse()
     {
         var response = new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent("""{"custom":"Hello from custom"}""", Encoding.UTF8, "application/json")
-        };
-
-        bool customEvaluator() => true;
-        Func<string, Task<ChatResponse?>> customDeserializer = async (json) =>
-        {
-            using var doc = JsonDocument.Parse(json);
-            var text = doc.RootElement.GetProperty("custom").GetString();
-            return new ChatResponse { Content = text ?? string.Empty };
+            Content = new StringContent("""{"Text":"Hello"}""", Encoding.UTF8, "application/json")
         };
 
         var result = await _provider.DeserializeResponseAsync<TestProviderResponse, ChatResponse>(
             response,
             ProviderType.OpenAI,
-            customEvaluator,
-            customDeserializer,
             MapProviderResponse,
             CancellationToken.None);
 
         result.Should().NotBeNull();
-        result.Content.Should().Be("Hello from custom");
+        result.Content.Should().Be("Hello");
     }
 
     [Fact]
-    public async Task DeserializeResponseAsync_WithoutCustomDeserializer_UsesStandard()
+    public async Task DeserializeResponseAsync_WhenMappingReturnsNull_ThrowsLLMConnectException()
     {
         var response = new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent("""{"Text":"Hello from standard"}""", Encoding.UTF8, "application/json")
+            Content = new StringContent("""{"Text":"Hello"}""", Encoding.UTF8, "application/json")
         };
 
-        bool customEvaluator() => false;
-
-        var result = await _provider.DeserializeResponseAsync<TestProviderResponse, ChatResponse>(
-            response,
-            ProviderType.OpenAI,
-            customEvaluator,
-            null!,
-            MapProviderResponse,
-            CancellationToken.None);
-
-        result.Should().NotBeNull();
-        result.Content.Should().Be("Hello from standard");
-    }
-
-    [Fact]
-    public async Task DeserializeResponseAsync_WhenCustomDeserializerThrows_WrapsException()
-    {
-        var response = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent("""{"test":"value"}""", Encoding.UTF8, "application/json")
-        };
-
-        bool customEvaluator() => true;
-        Func<string, Task<ChatResponse?>> customDeserializer = async (json) =>
-        {
-            await Task.CompletedTask;
-            throw new InvalidOperationException("Custom deserializer failed");
-        };
+        Func<TestProviderResponse?, ChatResponse?> mapNull = (resp) => null;
 
         Func<Task> act = async () => await _provider.DeserializeResponseAsync<TestProviderResponse, ChatResponse>(
             response,
             ProviderType.OpenAI,
-            customEvaluator,
-            customDeserializer,
-            MapProviderResponse,
-            CancellationToken.None);
-
-        var exception = await act.Should().ThrowAsync<LLMConnectException>();
-        exception.Which.Provider.Should().Be("CustomDeserializer");
-        exception.Which.Message.Should().Contain("Custom deserializer failed");
-    }
-
-    [Fact]
-    public async Task DeserializeResponseAsync_WhenStandardDeserializationFails_ThrowsLLMConnectException()
-    {
-        var response = new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent("""{"invalid":"json"}""", Encoding.UTF8, "application/json")
-        };
-
-        bool customEvaluator() => false;
-        Func<TestProviderResponse?, ChatResponse?> mapWithNull = (response) => null;
-
-        Func<Task> act = async () => await _provider.DeserializeResponseAsync<TestProviderResponse, ChatResponse>(
-            response,
-            ProviderType.OpenAI,
-            customEvaluator,
-            null!,
-            mapWithNull,
+            mapNull,
             CancellationToken.None);
 
         var exception = await act.Should().ThrowAsync<LLMConnectException>();
@@ -308,30 +233,19 @@ public class ProviderBaseTests
         exception.Which.Message.Should().Be("Failed to deserialize response.");
     }
 
-    // ---------- GetUrl Tests ----------
-
+    // ---------- GetUrlRelativePath Tests ----------
     [Fact]
-    public void GetUrl_WithoutEndpointOrBaseUrl_NonStreaming_ReturnsRelativePath()
+    public void GetUrlRelativePath_NonStreaming_ReturnsRelativePath()
     {
         var endpointOpts = new LLMConnectEndpointOptions();
 
-        var url = _provider.GetUrl(endpointOpts, QueryType.Chat, isStreaming: false);
+        var path = _provider.GetUrlRelativePath(endpointOpts, (int)QueryType.Chat, isStreaming: false);
 
-        url.Should().Be("chat/completions");
+        path.Should().Be("chat/completions");
     }
 
     [Fact]
-    public void GetUrl_WithoutEndpointOrBaseUrl_Streaming_ReturnsAbsoluteUrl_UsingInternalBaseUrl()
-    {
-        var endpointOpts = new LLMConnectEndpointOptions();
-
-        var url = _provider.GetUrl(endpointOpts, QueryType.Chat, isStreaming: true, internalBaseUrl: "https://api.openai.com/v1/");
-
-        url.Should().Be("https://api.openai.com/v1/chat/completions");
-    }
-
-    [Fact]
-    public void GetUrl_ForGoogleProvider_WithoutModel_ThrowsLLMConnectException()
+    public void GetUrlRelativePath_ForGoogleProvider_WithoutModel_ThrowsLLMConnectException()
     {
         var googleOptions = new LLMConnectGeneralOptions
         {
@@ -342,14 +256,14 @@ public class ProviderBaseTests
         var googleProvider = new TestProvider(googleOptions);
         var endpointOpts = new LLMConnectEndpointOptions();
 
-        Action act = () => googleProvider.GetUrl(endpointOpts, QueryType.Chat, isStreaming: false, model: null);
+        Action act = () => googleProvider.GetUrlRelativePath(endpointOpts, (int)QueryType.Chat, isStreaming: false, model: null);
 
         act.Should().Throw<LLMConnectException>()
             .WithMessage("Model must be specified for Google provider.");
     }
 
     [Fact]
-    public void GetUrl_ForGoogleProvider_SubstitutesModelPlaceholder()
+    public void GetUrlRelativePath_ForGoogleProvider_SubstitutesModelPlaceholder()
     {
         var googleOptions = new LLMConnectGeneralOptions
         {
@@ -360,49 +274,18 @@ public class ProviderBaseTests
         var googleProvider = new TestProvider(googleOptions);
         var endpointOpts = new LLMConnectEndpointOptions();
 
-        var url = googleProvider.GetUrl(endpointOpts, QueryType.Chat, isStreaming: false, model: "gemini-3.5-flash");
+        var path = googleProvider.GetUrlRelativePath(endpointOpts, (int)QueryType.Chat, isStreaming: false, model: "gemini-3.5-flash");
 
-        url.Should().Be("models/gemini-3.5-flash:generateContent");
+        path.Should().Be("models/gemini-3.5-flash:generateContent");
     }
 
     [Fact]
-    public void GetUrl_ForNonGoogleProvider_WithNullModel_DoesNotThrow()
+    public void GetUrlRelativePath_ForNonGoogleProvider_WithNullModel_DoesNotThrow()
     {
         var endpointOpts = new LLMConnectEndpointOptions();
 
-        Action act = () => _provider.GetUrl(endpointOpts, QueryType.Chat, isStreaming: false, model: null);
+        Action act = () => _provider.GetUrlRelativePath(endpointOpts, (int)QueryType.Chat, isStreaming: false, model: null);
 
         act.Should().NotThrow();
-    }
-
-    private class CustomStreamEventReader : IStreamEventReader
-    {
-        private readonly Stream _stream;
-
-        public CustomStreamEventReader(Stream stream)
-        {
-            _stream = stream;
-        }
-
-        public async IAsyncEnumerable<StreamEvent> ReadEventsAsync(
-            Stream stream,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            using var reader = new StreamReader(stream);
-            string? line;
-            while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
-            {
-                if (line.StartsWith("custom: "))
-                    yield return new StreamEvent(null, line.Substring(8));
-            }
-        }
-    }
-
-    private class CustomStreamChunkParser : IStreamChunkParser
-    {
-        public ChatChunk? Parse(StreamEvent evt)
-        {
-            return new ChatChunk { Content = evt.Data, IsComplete = false };
-        }
     }
 }

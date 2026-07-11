@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using LLMConnect.Models;
+using Microsoft.Extensions.Logging;
 
 namespace LLMConnect;
 

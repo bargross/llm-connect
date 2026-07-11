@@ -20,7 +20,7 @@ public class OpenAIChatRequestValidatorTests
     public void Validate_WhenResponseFormatIsText_DoesNotThrow()
     {
         // Arrange
-        var request = new ChatRequest
+        var request = new Models.ChatRequest
         {
             Messages = new List<Message> { new UserMessage("Hello") },
             ResponseFormat = "text"
@@ -44,7 +44,7 @@ public class OpenAIChatRequestValidatorTests
     public void Validate_WhenResponseFormatIsJsonObject_DoesNotThrow()
     {
         // Arrange
-        var request = new ChatRequest
+        var request = new Models.ChatRequest
         {
             Messages = new List<Message> { new UserMessage("Hello") },
             ResponseFormat = "json_object"
@@ -72,7 +72,7 @@ public class OpenAIChatRequestValidatorTests
     public void Validate_WhenResponseFormatIsInvalid_ThrowsArgumentException(string invalidFormat)
     {
         // Arrange
-        var request = new ChatRequest
+        var request = new Models.ChatRequest
         {
             Messages = new List<Message> { new UserMessage("Hello") },
             ResponseFormat = invalidFormat
@@ -83,7 +83,7 @@ public class OpenAIChatRequestValidatorTests
 
         // Assert
         act.Should().Throw<ArgumentException>()
-            .WithParameterName(nameof(ChatRequest.ResponseFormat))
+            .WithParameterName(nameof(Models.ChatRequest.ResponseFormat))
             .Which.Message.Should().Contain("ResponseFormat must be 'text' or 'json_object'.");
 
         _loggerMock.Verify(l => l.Log(
@@ -102,7 +102,7 @@ public class OpenAIChatRequestValidatorTests
     public void Validate_WhenSeedIsNonNegative_DoesNotThrow(int seed)
     {
         // Arrange
-        var request = new ChatRequest
+        var request = new Models.ChatRequest
         {
             Messages = new List<Message> { new UserMessage("Hello") },
             Seed = seed
@@ -129,7 +129,7 @@ public class OpenAIChatRequestValidatorTests
     public void Validate_WhenSeedIsNegative_ThrowsArgumentException(int seed)
     {
         // Arrange
-        var request = new ChatRequest
+        var request = new Models.ChatRequest
         {
             Messages = new List<Message> { new UserMessage("Hello") },
             Seed = seed
@@ -140,7 +140,7 @@ public class OpenAIChatRequestValidatorTests
 
         // Assert
         act.Should().Throw<ArgumentException>()
-            .WithParameterName(nameof(ChatRequest.Seed))
+            .WithParameterName(nameof(Models.ChatRequest.Seed))
             .Which.Message.Should().Contain("Seed must be a non-negative integer.");
 
         _loggerMock.Verify(l => l.Log(
@@ -156,7 +156,7 @@ public class OpenAIChatRequestValidatorTests
     public void Validate_WhenBothResponseFormatAndSeedAreInvalid_ThrowsFirstError()
     {
         // Arrange
-        var request = new ChatRequest
+        var request = new Models.ChatRequest
         {
             Messages = new List<Message> { new UserMessage("Hello") },
             ResponseFormat = "invalid",
@@ -168,7 +168,7 @@ public class OpenAIChatRequestValidatorTests
 
         // Assert
         act.Should().Throw<ArgumentException>()
-            .WithParameterName(nameof(ChatRequest.ResponseFormat))
+            .WithParameterName(nameof(Models.ChatRequest.ResponseFormat))
             .Which.Message.Should().Contain("ResponseFormat must be 'text' or 'json_object'.");
 
         // Seed error should NOT be logged because ResponseFormat validation fails first
@@ -185,7 +185,7 @@ public class OpenAIChatRequestValidatorTests
     public void Validate_WhenBothResponseFormatAndSeedAreValid_LogsInformation()
     {
         // Arrange
-        var request = new ChatRequest
+        var request = new Models.ChatRequest
         {
             Messages = new List<Message> { new UserMessage("Hello") },
             ResponseFormat = "json_object",
@@ -213,7 +213,7 @@ public class OpenAIChatRequestValidatorTests
     public void Validate_WhenLoggerIsNull_DoesNotThrow()
     {
         // Arrange
-        var request = new ChatRequest
+        var request = new Models.ChatRequest
         {
             Messages = new List<Message> { new UserMessage("Hello") },
             ResponseFormat = "text",
@@ -231,7 +231,7 @@ public class OpenAIChatRequestValidatorTests
     public void Validate_WhenBaseValidationFails_ThrowsArgumentException_BeforeProviderSpecificValidation()
     {
         // Arrange
-        var request = new ChatRequest
+        var request = new Models.ChatRequest
         {
             Messages = new List<Message>(), // Empty messages — base validation fails
             ResponseFormat = "json_object", // Would be valid, but base fails first
@@ -243,7 +243,7 @@ public class OpenAIChatRequestValidatorTests
 
         // Assert
         act.Should().Throw<ArgumentException>()
-            .WithParameterName(nameof(ChatRequest.Messages));
+            .WithParameterName(nameof(Models.ChatRequest.Messages));
 
         // OpenAI-specific validation should NOT be reached because base validation threw
         _loggerMock.Verify(l => l.Log(

@@ -49,9 +49,6 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
 
         if (_logger is null)
             _logger = options.LoggerFactory?.CreateLogger<LLMConnectClient>();
-
-        _logger?.LogWarning(
-            "Using a user-supplied HttpClient. Retry logic must be configured by the caller.");
     }
 
     /// <summary>
@@ -60,10 +57,10 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
     /// <param name="generalOpts"></param>
     /// <param name="endpointOpts"></param>
     public LLMConnectClient(LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions? endpointOpts)
-        : this(generalOpts, endpointOpts ?? new LLMConnectEndpointOptions(), 
+        : this(generalOpts, endpointOpts, 
               new HttpClient(
                   new RetryDelegatingHandler(
-                      generalOpts.MaxRetries, 
+                      generalOpts?.MaxRetries ?? 3, 
                       generalOpts?.LoggerFactory?.CreateLogger<RetryDelegatingHandler>())
         {
             InnerHandler = new SocketsHttpHandler
@@ -85,16 +82,13 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
     /// <param name="endpointOpts">endpoint-specific options</param>
     /// <param name="httpClient">user-defined HTTP client</param>
     public LLMConnectClient(LLMConnectGeneralOptions? generalOpts, LLMConnectEndpointOptions? endpointOpts, HttpClient httpClient)
-    : this(new LLMProviderFactory(generalOpts, endpointOpts ?? new LLMConnectEndpointOptions(), httpClient))
+    : this(new LLMProviderFactory(generalOpts, endpointOpts, httpClient))
     {
         _ownsHttpClient = false;
         _httpClient = httpClient;
 
         if (_logger is null)
             _logger = generalOpts?.LoggerFactory?.CreateLogger<LLMConnectClient>();
-
-        _logger?.LogWarning(
-            "Using a user-supplied HttpClient. Retry logic must be configured by the caller.");
     }
 
     /// <summary>
@@ -118,7 +112,7 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
     /// <param name="endpointOpts">endpoint-specific options</param>
     /// <param name="httpClientFactory">user-defined HTTP client factory</param>
     public LLMConnectClient(LLMConnectGeneralOptions? generalOpts, LLMConnectEndpointOptions? endpointOpts, IHttpClientFactory httpClientFactory)
-    : this(new LLMProviderFactory(generalOpts, endpointOpts ?? new LLMConnectEndpointOptions(), httpClientFactory))
+    : this(new LLMProviderFactory(generalOpts, endpointOpts, httpClientFactory))
     {
         _ownsHttpClient = true;
 

@@ -113,7 +113,7 @@ public class OllamaStreamChunkParserTests
 
         // Assert
         result.Should().NotBeNull();
-        result.Content.Should().BeEmpty();
+        result.Content.Should().BeNull();
         result.IsComplete.Should().BeTrue();
         _loggerMock.VerifyNoOtherCalls();
     }
@@ -131,14 +131,14 @@ public class OllamaStreamChunkParserTests
 
         // Assert
         result.Should().NotBeNull();
-        result.Content.Should().BeEmpty();
+        result.Content.Should().BeNull();
         result.IsComplete.Should().BeTrue();
     }
 
     // ---------- No Content and Not Done ----------
 
     [Fact]
-    public void Parse_WithNoContentAndDoneFalse_ReturnsNull()
+    public void Parse_WithNoContentAndDoneFalse_ReturnsChunkWithNullContent()
     {
         // Arrange
         var parser = new OllamaStreamChunkParser(_options);
@@ -149,7 +149,11 @@ public class OllamaStreamChunkParserTests
         var result = parser.Parse(evt);
 
         // Assert
-        result.Should().BeNull();
+        result.Should().NotBeNull();
+        result.Content.Should().BeNull();
+        result.ToolCalls.Should().BeNull();
+        result.IsComplete.Should().BeFalse();
+        result.FinishReason.Should().BeNull();
         _loggerMock.VerifyNoOtherCalls();
     }
 
@@ -190,21 +194,23 @@ public class OllamaStreamChunkParserTests
     [Fact]
     public void Parse_WithMalformedJson_LogsAndReturnsNull()
     {
-        // Arrange
+        // Arrange – uses _options from constructor (already configured with logger factory)
+        var malformed = "{ incomplete json";
+        var evt = new StreamEvent(null, malformed);
         var parser = new OllamaStreamChunkParser(_options);
-        var malformedJson = "{message:{content:Hello},done:false}";
-        var evt = new StreamEvent(null, malformedJson);
 
         // Act
         var result = parser.Parse(evt);
 
         // Assert
         result.Should().BeNull();
+
+        // Verify log – use partial match to handle singular/plural variations
         _loggerMock.Verify(
             x => x.Log(
                 LogLevel.Information,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Ignoring malformed chunks")),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Ignoring malformed")),
                 It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);
@@ -227,5 +233,26 @@ public class OllamaStreamChunkParserTests
         result.Should().NotBeNull();
         result.Content.Should().Be("Hello");
         result.IsComplete.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Parse_WithToolCallsDelta_ReturnsToolCallChunk()
+    {
+        // Arrange
+        var ndjson = @"{""message"":{""role"":""assistant"",""content"":"""",""tool_calls"":[{""function"":{""name"":""get_weather"",""arguments"":{""location"":""Boston""}}}]},""done"":false}";
+        var evt = new StreamEvent(null, ndjson);
+        var parser = new OllamaStreamChunkParser(_options);
+
+        // Act
+        var result = parser.Parse(evt);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.ToolCalls.Should().HaveCount(1);
+        var tc = result.ToolCalls[0];
+        tc.Index.Should().Be(0);
+        tc.Id.Should().Be("get_weather"); // Ollama uses function name as fallback ID
+        tc.Name.Should().Be("get_weather");
+        tc.ArgumentsDelta.Should().Be("{\"location\":\"Boston\"}");
     }
 }

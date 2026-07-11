@@ -1,5 +1,6 @@
-﻿using LLMConnect.Models;
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
+
+namespace LLMConnect.Models;
 
 /// <summary>
 /// Represents a request to generate a chat completion, including the
