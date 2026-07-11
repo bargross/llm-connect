@@ -8,7 +8,7 @@
 
   <PropertyGroup>
     <PackageId>LLMConnect</PackageId>
-    <Version>1.0.1</Version>
+    <Version>2.0.0</Version>
     <Authors>Leonardo H. Mengesha</Authors>
     <Description>A provider-agnostic .NET client for Large Language Models. One API for AzureOpenAI, OpenAI, Anthropic, Google Gemini, and local Ollama. Full async, streaming, and DI support.</Description>
     <PackageTags>llm;openai;azureopenai;anthropic;google;ollama;chat;llms;llm-chat</PackageTags>
