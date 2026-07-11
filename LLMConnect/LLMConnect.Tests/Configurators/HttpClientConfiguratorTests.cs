@@ -2,330 +2,312 @@
 using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
-using Moq;
 using System.Net.Http.Headers;
+using Moq;
 
-namespace LLMConnect.Tests.Configurators;
+namespace LLMConnect.Tests.Infrastructure;
 
 public class HttpClientConfiguratorTests
 {
     private readonly Mock<ILoggerFactory> _loggerFactoryMock;
+    private readonly Mock<ILogger> _loggerMock;
 
     public HttpClientConfiguratorTests()
     {
+        _loggerMock = new Mock<ILogger>();
         _loggerFactoryMock = new Mock<ILoggerFactory>();
         _loggerFactoryMock
             .Setup(x => x.CreateLogger(It.IsAny<string>()))
-            .Returns(Mock.Of<ILogger>());
+            .Returns(_loggerMock.Object);
     }
 
-    // ---------- ConfigureForProvider ----------
-
-    [Theory]
-    [InlineData(ProviderType.OpenAI, "https://api.openai.com/v1/chat/completions")]
-    [InlineData(ProviderType.Anthropic, "https://api.anthropic.com/v1/messages")]
-    [InlineData(ProviderType.Google, "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent")]
-    [InlineData(ProviderType.Ollama, "http://localhost:11434/api/chat")]
-    public void ConfigureForProvider_SetsBaseAddressCorrectly(ProviderType provider, string expectedBaseAddress)
+    private LLMConnectGeneralOptions CreateGeneralOptions(ProviderType provider, string apiKey = "test-key", TimeSpan? timeout = null)
     {
-        // Arrange
-        var options = new LLMConnectClientOptions
+        return new LLMConnectGeneralOptions
         {
             Provider = provider,
-            ApiKey = "test-key",
-            Timeout = TimeSpan.FromSeconds(30),
-            LoggerFactory = _loggerFactoryMock.Object
+            ApiKey = apiKey,
+            LoggerFactory = _loggerFactoryMock.Object,
+            Timeout = timeout ?? TimeSpan.FromSeconds(30),
+            DefaultModel = provider == ProviderType.Ollama ? "llama3" : "gpt-4"
         };
+    }
+
+    private LLMConnectEndpointOptions CreateEndpointOptions(
+        int? ollamaPort = null,
+        string? azureResource = null,
+        string? azureDeployment = null,
+        string? azureApiVersion = null)
+    {
+        return new LLMConnectEndpointOptions
+        {
+            OllamaPort = ollamaPort,
+            AzureResourceName = azureResource,
+            AzureDeploymentName = azureDeployment,
+            AzureApiVersion = azureApiVersion
+        };
+    }
+
+    // ---------- Base Address ----------
+
+    [Fact]
+    public void ConfigureForProvider_ForOpenAI_SetsCorrectBaseAddress()
+    {
+        // Arrange
+        var generalOpts = CreateGeneralOptions(ProviderType.OpenAI);
+        var endpointOpts = CreateEndpointOptions();
         var client = new HttpClient();
 
         // Act
-        var configuredClient = HttpClientConfigurator.ConfigureForProvider(options, client);
+        var configured = HttpClientConfigurator.ConfigureForProvider(generalOpts, endpointOpts, client);
 
         // Assert
-        configuredClient.BaseAddress.Should().NotBeNull();
-        configuredClient.BaseAddress!.ToString().Should().Be(expectedBaseAddress);
+        configured.BaseAddress.Should().NotBeNull();
+        configured.BaseAddress!.ToString().Should().Be("https://api.openai.com/v1/");
     }
 
     [Fact]
-    public void ConfigureForProvider_WhenCustomEndpointProvided_UsesCustomEndpoint()
+    public void ConfigureForProvider_ForAnthropic_SetsCorrectBaseAddress()
     {
-        // Arrange
-        var customEndpoint = "https://custom-proxy.com/v1/chat";
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.OpenAI,
-            ApiKey = "test-key",
-            Endpoint = customEndpoint,
-            Timeout = TimeSpan.FromSeconds(30),
-            LoggerFactory = _loggerFactoryMock.Object
-        };
+        var generalOpts = CreateGeneralOptions(ProviderType.Anthropic);
+        var endpointOpts = CreateEndpointOptions();
         var client = new HttpClient();
 
-        // Act
-        var configuredClient = HttpClientConfigurator.ConfigureForProvider(options, client);
+        var configured = HttpClientConfigurator.ConfigureForProvider(generalOpts, endpointOpts, client);
 
-        // Assert
-        configuredClient.BaseAddress.Should().NotBeNull();
-        configuredClient.BaseAddress!.ToString().Should().Be(customEndpoint);
+        configured.BaseAddress.Should().NotBeNull();
+        configured.BaseAddress!.ToString().Should().Be("https://api.anthropic.com/v1/");
     }
 
     [Fact]
-    public void ConfigureForProvider_ForOllama_WithPort_UsesCustomPortInBaseAddress()
+    public void ConfigureForProvider_ForGoogle_SetsCorrectBaseAddress()
     {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.Ollama,
-            OllamaPort = 11435,
-            Timeout = TimeSpan.FromSeconds(30),
-            LoggerFactory = _loggerFactoryMock.Object
-        };
+        var generalOpts = CreateGeneralOptions(ProviderType.Google);
+        var endpointOpts = CreateEndpointOptions();
         var client = new HttpClient();
 
-        // Act
-        var configuredClient = HttpClientConfigurator.ConfigureForProvider(options, client);
+        var configured = HttpClientConfigurator.ConfigureForProvider(generalOpts, endpointOpts, client);
 
-        // Assert
-        configuredClient.BaseAddress.Should().NotBeNull();
-        configuredClient.BaseAddress!.ToString().Should().Be("http://localhost:11435/api/chat");
+        configured.BaseAddress.Should().NotBeNull();
+        configured.BaseAddress!.ToString().Should().Be("https://generativelanguage.googleapis.com/v1beta/");
     }
 
     [Fact]
-    public void ConfigureForProvider_ForOllama_WithNoPort_UsesDefaultPortInBaseAddress()
+    public void ConfigureForProvider_ForOllama_SetsCorrectBaseAddressWithDefaultPort()
     {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.Ollama,
-            OllamaPort = null,
-            Timeout = TimeSpan.FromSeconds(30),
-            LoggerFactory = _loggerFactoryMock.Object
-        };
+        var generalOpts = CreateGeneralOptions(ProviderType.Ollama);
+        var endpointOpts = CreateEndpointOptions();
         var client = new HttpClient();
 
-        // Act
-        var configuredClient = HttpClientConfigurator.ConfigureForProvider(options, client);
+        var configured = HttpClientConfigurator.ConfigureForProvider(generalOpts, endpointOpts, client);
 
-        // Assert
-        configuredClient.BaseAddress.Should().NotBeNull();
-        configuredClient.BaseAddress!.ToString().Should().Be("http://localhost:11434/api/chat");
+        configured.BaseAddress.Should().NotBeNull();
+        configured.BaseAddress!.ToString().Should().Be("http://localhost:11434/");
     }
 
     [Fact]
-    public void ConfigureForProvider_ForOllama_WithCustomEndpointAndPort_IgnoresPort()
+    public void ConfigureForProvider_ForOllama_WithCustomPort_SetsCorrectBaseAddress()
     {
-        // Arrange
-        var customEndpoint = "http://custom-ollama:11435/api/chat";
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.Ollama,
-            OllamaPort = 9999, // Should be ignored because Endpoint is set
-            Endpoint = customEndpoint,
-            Timeout = TimeSpan.FromSeconds(30),
-            LoggerFactory = _loggerFactoryMock.Object
-        };
+        var generalOpts = CreateGeneralOptions(ProviderType.Ollama);
+        var endpointOpts = CreateEndpointOptions(ollamaPort: 12345);
         var client = new HttpClient();
 
-        // Act
-        var configuredClient = HttpClientConfigurator.ConfigureForProvider(options, client);
+        var configured = HttpClientConfigurator.ConfigureForProvider(generalOpts, endpointOpts, client);
 
-        // Assert
-        configuredClient.BaseAddress.Should().NotBeNull();
-        configuredClient.BaseAddress!.ToString().Should().Be(customEndpoint);
-    }
-
-    [Theory]
-    [InlineData(ProviderType.OpenAI, "Authorization", "Bearer test-key")]
-    [InlineData(ProviderType.Anthropic, "x-api-key", "test-key")]
-    [InlineData(ProviderType.Google, "x-goog-api-key", "test-key")]
-    public void ConfigureForProvider_AddsCorrectAuthenticationHeader(ProviderType provider, string headerName, string expectedValue)
-    {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = provider,
-            ApiKey = "test-key",
-            Timeout = TimeSpan.FromSeconds(30),
-            LoggerFactory = _loggerFactoryMock.Object
-        };
-        var client = new HttpClient();
-
-        // Act
-        var configuredClient = HttpClientConfigurator.ConfigureForProvider(options, client);
-
-        // Assert
-        configuredClient.DefaultRequestHeaders.Should().ContainKey(headerName);
-        configuredClient.DefaultRequestHeaders.GetValues(headerName).Should().Contain(expectedValue);
+        configured.BaseAddress.Should().NotBeNull();
+        configured.BaseAddress!.ToString().Should().Be("http://localhost:12345/");
     }
 
     [Fact]
-    public void ConfigureForProvider_ForOllama_DoesNotAddAuthenticationHeader()
+    public void ConfigureForProvider_ForAzureOpenAI_SetsCorrectBaseAddress()
     {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.Ollama,
-            ApiKey = null,
-            Timeout = TimeSpan.FromSeconds(30),
-            LoggerFactory = _loggerFactoryMock.Object
-        };
+        var generalOpts = CreateGeneralOptions(ProviderType.AzureOpenAI);
+        var endpointOpts = CreateEndpointOptions(
+            azureResource: "my-resource",
+            azureDeployment: "my-deployment",
+            azureApiVersion: "2024-02-15-preview");
         var client = new HttpClient();
 
-        // Act
-        var configuredClient = HttpClientConfigurator.ConfigureForProvider(options, client);
+        var configured = HttpClientConfigurator.ConfigureForProvider(generalOpts, endpointOpts, client);
 
-        // Assert
-        configuredClient.DefaultRequestHeaders.Should().NotContainKey("Authorization");
-        configuredClient.DefaultRequestHeaders.Should().NotContainKey("x-api-key");
-        configuredClient.DefaultRequestHeaders.Should().NotContainKey("x-goog-api-key");
+        configured.BaseAddress.Should().NotBeNull();
+        configured.BaseAddress!.ToString().Should().Be("https://my-resource.openai.azure.com/openai/deployments/my-deployment/");
     }
 
-    [Fact]
-    public void ConfigureForProvider_SetsAcceptHeaderToApplicationJson()
-    {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.OpenAI,
-            ApiKey = "test-key",
-            Timeout = TimeSpan.FromSeconds(30),
-            LoggerFactory = _loggerFactoryMock.Object
-        };
-        var client = new HttpClient();
-
-        // Act
-        var configuredClient = HttpClientConfigurator.ConfigureForProvider(options, client);
-
-        // Assert
-        configuredClient.DefaultRequestHeaders.Accept.Should().Contain(a => a.MediaType == "application/json");
-    }
+    // ---------- Timeout ----------
 
     [Fact]
-    public void ConfigureForProvider_SetsTimeout()
+    public void ConfigureForProvider_SetsTimeoutFromGeneralOptions()
     {
-        // Arrange
         var expectedTimeout = TimeSpan.FromSeconds(45);
-        var options = new LLMConnectClientOptions
+        var generalOpts = CreateGeneralOptions(ProviderType.OpenAI, timeout: expectedTimeout);
+        var endpointOpts = CreateEndpointOptions();
+        var client = new HttpClient();
+
+        var configured = HttpClientConfigurator.ConfigureForProvider(generalOpts, endpointOpts, client);
+
+        configured.Timeout.Should().Be(expectedTimeout);
+    }
+
+    // ---------- Headers ----------
+
+    [Fact]
+    public void ConfigureForProvider_ForOpenAI_SetsAuthorizationBearerAndAccept()
+    {
+        var generalOpts = CreateGeneralOptions(ProviderType.OpenAI, apiKey: "openai-key");
+        var endpointOpts = CreateEndpointOptions();
+        var client = new HttpClient();
+
+        var configured = HttpClientConfigurator.ConfigureForProvider(generalOpts, endpointOpts, client);
+
+        configured.DefaultRequestHeaders.Should().ContainKey("Authorization");
+        configured.DefaultRequestHeaders.GetValues("Authorization").Should().Contain("Bearer openai-key");
+        configured.DefaultRequestHeaders.Should().ContainKey("Accept");
+        configured.DefaultRequestHeaders.GetValues("Accept").Should().Contain("application/json");
+    }
+
+    [Fact]
+    public void ConfigureForProvider_ForAzureOpenAI_SetsApiKeyHeaderAndAccept()
+    {
+        // Arrange
+        var generalOpts = CreateGeneralOptions(ProviderType.AzureOpenAI, apiKey: "azure-key");
+        var endpointOpts = new LLMConnectEndpointOptions
         {
-            Provider = ProviderType.OpenAI,
-            ApiKey = "test-key",
-            Timeout = expectedTimeout,
-            LoggerFactory = _loggerFactoryMock.Object
+            AzureResourceName = "my-resource",
+            AzureDeploymentName = "my-deployment",
+            AzureApiVersion = "2024-02-15-preview"
         };
         var client = new HttpClient();
 
         // Act
-        var configuredClient = HttpClientConfigurator.ConfigureForProvider(options, client);
+        var configured = HttpClientConfigurator.ConfigureForProvider(generalOpts, endpointOpts, client);
 
         // Assert
-        configuredClient.Timeout.Should().Be(expectedTimeout);
+        configured.DefaultRequestHeaders.Should().ContainKey("api-key");
+        configured.DefaultRequestHeaders.GetValues("api-key").Should().Contain("azure-key");
+        configured.DefaultRequestHeaders.Should().ContainKey("Accept");
+        configured.DefaultRequestHeaders.GetValues("Accept").Should().Contain("application/json");
     }
 
     [Fact]
-    public void ConfigureForProvider_AddsUserAgentIfNotPresent()
+    public void ConfigureForProvider_ForAnthropic_SetsXApiKeyAndAnthropicVersionAndAccept()
     {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.OpenAI,
-            ApiKey = "test-key",
-            Timeout = TimeSpan.FromSeconds(30),
-            LoggerFactory = _loggerFactoryMock.Object
-        };
+        var generalOpts = CreateGeneralOptions(ProviderType.Anthropic, apiKey: "anthropic-key");
+        var endpointOpts = CreateEndpointOptions();
         var client = new HttpClient();
 
-        // Act
-        var configuredClient = HttpClientConfigurator.ConfigureForProvider(options, client);
+        var configured = HttpClientConfigurator.ConfigureForProvider(generalOpts, endpointOpts, client);
 
-        // Assert
-        configuredClient.DefaultRequestHeaders.UserAgent.Should().Contain(ua =>
-            ua.Product.Name == "LLMConnect" && ua.Product.Version == "1.0.0");
+        configured.DefaultRequestHeaders.Should().ContainKey("x-api-key");
+        configured.DefaultRequestHeaders.GetValues("x-api-key").Should().Contain("anthropic-key");
+        configured.DefaultRequestHeaders.Should().ContainKey("anthropic-version");
+        configured.DefaultRequestHeaders.GetValues("anthropic-version").Should().Contain("2023-06-01");
+        configured.DefaultRequestHeaders.Should().ContainKey("Accept");
+        configured.DefaultRequestHeaders.GetValues("Accept").Should().Contain("application/json");
     }
 
     [Fact]
-    public void ConfigureForProvider_DoesNotOverrideExistingUserAgent()
+    public void ConfigureForProvider_ForGoogle_SetsXGoogApiKeyAndAccept()
     {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.OpenAI,
-            ApiKey = "test-key",
-            Timeout = TimeSpan.FromSeconds(30),
-            LoggerFactory = _loggerFactoryMock.Object
-        };
-        var client = new HttpClient();
-        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("CustomApp", "2.0"));
-
-        // Act
-        var configuredClient = HttpClientConfigurator.ConfigureForProvider(options, client);
-
-        // Assert
-        configuredClient.DefaultRequestHeaders.UserAgent.Should().Contain(ua =>
-            ua.Product.Name == "CustomApp" && ua.Product.Version == "2.0");
-        configuredClient.DefaultRequestHeaders.UserAgent.Should().NotContain(ua =>
-            ua.Product.Name == "LLMConnect");
-    }
-
-    [Fact]
-    public void ConfigureForProvider_ForAnthropic_AddsAnthropicVersionHeader()
-    {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.Anthropic,
-            ApiKey = "test-key",
-            Timeout = TimeSpan.FromSeconds(30),
-            LoggerFactory = _loggerFactoryMock.Object
-        };
+        var generalOpts = CreateGeneralOptions(ProviderType.Google, apiKey: "google-key");
+        var endpointOpts = CreateEndpointOptions();
         var client = new HttpClient();
 
-        // Act
-        var configuredClient = HttpClientConfigurator.ConfigureForProvider(options, client);
+        var configured = HttpClientConfigurator.ConfigureForProvider(generalOpts, endpointOpts, client);
 
-        // Assert
-        configuredClient.DefaultRequestHeaders.Should().ContainKey("anthropic-version");
-        configuredClient.DefaultRequestHeaders.GetValues("anthropic-version").Should().Contain("2023-06-01");
+        configured.DefaultRequestHeaders.Should().ContainKey("x-goog-api-key");
+        configured.DefaultRequestHeaders.GetValues("x-goog-api-key").Should().Contain("google-key");
+        configured.DefaultRequestHeaders.Should().ContainKey("Accept");
+        configured.DefaultRequestHeaders.GetValues("Accept").Should().Contain("application/json");
     }
 
     [Fact]
-    public void ConfigureForProvider_ForUnsupportedProvider_ThrowsNotSupportedException()
+    public void ConfigureForProvider_ForOllama_SetsNoAuthenticationHeaders()
     {
-        // Arrange
+        var generalOpts = CreateGeneralOptions(ProviderType.Ollama);
+        var endpointOpts = CreateEndpointOptions();
+        var client = new HttpClient();
+
+        var configured = HttpClientConfigurator.ConfigureForProvider(generalOpts, endpointOpts, client);
+
+        configured.DefaultRequestHeaders.Should().NotContainKey("Authorization");
+        configured.DefaultRequestHeaders.Should().NotContainKey("api-key");
+        configured.DefaultRequestHeaders.Should().NotContainKey("x-api-key");
+        configured.DefaultRequestHeaders.Should().NotContainKey("x-goog-api-key");
+        configured.DefaultRequestHeaders.Should().NotContainKey("anthropic-version");
+        // Accept is not added for Ollama
+        configured.DefaultRequestHeaders.Should().NotContainKey("Accept");
+    }
+
+    // ---------- Header Removal ----------
+
+    [Fact]
+    public void ConfigureForProvider_RemovesControlledHeadersBeforeAdding()
+    {
+        var generalOpts = CreateGeneralOptions(ProviderType.OpenAI, apiKey: "openai-key");
+        var endpointOpts = CreateEndpointOptions();
+        var client = new HttpClient();
+
+        // Pre-populate headers that should be removed
+        client.DefaultRequestHeaders.Add("Authorization", "Bearer old-token");
+        client.DefaultRequestHeaders.Add("Accept", "text/plain");
+        client.DefaultRequestHeaders.Add("x-api-key", "old-key");
+        client.DefaultRequestHeaders.Add("anthropic-version", "old-version");
+        client.DefaultRequestHeaders.Add("x-goog-api-key", "old-google-key");
+
+        var configured = HttpClientConfigurator.ConfigureForProvider(generalOpts, endpointOpts, client);
+
+        // All controlled headers should be removed and replaced with correct ones
+        configured.DefaultRequestHeaders.Should().ContainKey("Authorization");
+        configured.DefaultRequestHeaders.GetValues("Authorization").Should().Contain("Bearer openai-key");
+        configured.DefaultRequestHeaders.Should().ContainKey("Accept");
+        configured.DefaultRequestHeaders.GetValues("Accept").Should().Contain("application/json");
+        configured.DefaultRequestHeaders.Should().NotContainKey("x-api-key");
+        configured.DefaultRequestHeaders.Should().NotContainKey("anthropic-version");
+        configured.DefaultRequestHeaders.Should().NotContainKey("x-goog-api-key");
+    }
+
+    // ---------- User-Agent ----------
+
+    [Fact]
+    public void ConfigureForProvider_AddsDefaultUserAgent_WhenNonePresent()
+    {
+        var generalOpts = CreateGeneralOptions(ProviderType.OpenAI);
+        var endpointOpts = CreateEndpointOptions();
+        var client = new HttpClient();
+
+        var configured = HttpClientConfigurator.ConfigureForProvider(generalOpts, endpointOpts, client);
+
+        configured.DefaultRequestHeaders.UserAgent.Should().ContainSingle(ua => ua.Product.Name == "LLMConnect");
+    }
+
+    [Fact]
+    public void ConfigureForProvider_DoesNotAddDefaultUserAgent_WhenUserAgentAlreadyPresent()
+    {
+        var generalOpts = CreateGeneralOptions(ProviderType.OpenAI);
+        var endpointOpts = CreateEndpointOptions();
+        var client = new HttpClient();
+        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("CustomAgent", "1.0"));
+
+        var configured = HttpClientConfigurator.ConfigureForProvider(generalOpts, endpointOpts, client);
+
+        configured.DefaultRequestHeaders.UserAgent.Should().ContainSingle(ua => ua.Product.Name == "CustomAgent");
+        configured.DefaultRequestHeaders.UserAgent.Should().NotContain(ua => ua.Product.Name == "LLMConnect");
+    }
+
+    // ---------- Unsupported Provider ----------
+
+    [Fact]
+    public void ConfigureForProvider_WithUnsupportedProvider_ThrowsNotSupportedException()
+    {
         var unsupportedProvider = (ProviderType)999;
-        var options = new LLMConnectClientOptions
-        {
-            Provider = unsupportedProvider,
-            ApiKey = "test-key",
-            Timeout = TimeSpan.FromSeconds(30),
-            LoggerFactory = _loggerFactoryMock.Object
-        };
+        var generalOpts = CreateGeneralOptions(unsupportedProvider);
+        var endpointOpts = CreateEndpointOptions();
         var client = new HttpClient();
 
-        // Act
-        Action act = () => HttpClientConfigurator.ConfigureForProvider(options, client);
+        Action act = () => HttpClientConfigurator.ConfigureForProvider(generalOpts, endpointOpts, client);
 
-        // Assert
         act.Should().Throw<NotSupportedException>()
             .WithMessage($"Provider '{unsupportedProvider}' is not supported.");
-    }
-
-    [Fact]
-    public void ConfigureForProvider_WhenLoggerFactoryIsNull_DoesNotThrow()
-    {
-        // Arrange
-        var options = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.OpenAI,
-            ApiKey = "test-key",
-            Timeout = TimeSpan.FromSeconds(30),
-            LoggerFactory = null
-        };
-        var client = new HttpClient();
-
-        // Act
-        Action act = () => HttpClientConfigurator.ConfigureForProvider(options, client);
-
-        // Assert
-        act.Should().NotThrow();
     }
 }

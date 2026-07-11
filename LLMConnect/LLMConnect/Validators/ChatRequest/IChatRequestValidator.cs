@@ -1,10 +1,9 @@
-﻿using LLMConnect.Settings;
+﻿using LLMConnect.Models;
 using Microsoft.Extensions.Logging;
 
-namespace LLMConnect
+namespace LLMConnect;
+
+internal interface IChatRequestValidator
 {
-    internal interface IChatRequestValidator
-    {
-        void Validate(ChatRequest request, ILogger? logger = null);
-    }
+    void Validate(ChatRequest request, ILogger? logger = null);
 }

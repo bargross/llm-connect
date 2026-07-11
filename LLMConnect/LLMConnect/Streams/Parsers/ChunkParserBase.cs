@@ -9,7 +9,7 @@ internal abstract class ChunkParserBase<TRoot>
 
     public ChunkParserBase() { }
 
-    public ChunkParserBase(LLMConnectClientOptions options)
+    public ChunkParserBase(LLMConnectGeneralOptions options)
     {
         _logger = options.LoggerFactory?.CreateLogger<TRoot>();
     }

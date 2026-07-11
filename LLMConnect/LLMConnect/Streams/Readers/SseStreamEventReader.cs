@@ -2,14 +2,14 @@
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 
-namespace LLMConnect.Streams.StreamReaders;
+namespace LLMConnect;
 
 internal class SseStreamEventReader : IStreamEventReader
 {
     private readonly ILogger<SseStreamEventReader>? _logger;
 
     public SseStreamEventReader() { }
-    public SseStreamEventReader(LLMConnectClientOptions options)
+    public SseStreamEventReader(LLMConnectGeneralOptions options)
     {
         _logger = options.LoggerFactory?.CreateLogger<SseStreamEventReader>();
     }
@@ -57,7 +57,6 @@ internal class SseStreamEventReader : IStreamEventReader
                 }
 
                 yield return new StreamEvent(currentEvent, data);
-                currentEvent = null; // Reset after yielding
             }
         }
     }

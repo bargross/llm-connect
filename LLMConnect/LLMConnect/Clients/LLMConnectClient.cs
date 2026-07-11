@@ -17,7 +17,7 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
     private readonly ILogger<LLMConnectClient>? _logger;
 
     /// <summary>
-    /// user provides only options (library creates HttpClient)
+    /// user provides only options, the library creates HttpClient (backward compatible for older versions of LLMConnect)
     /// </summary>
     /// <param name="options"></param>
     public LLMConnectClient(LLMConnectClientOptions options)
@@ -37,35 +37,87 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
 
 
     /// <summary>
-    /// for the user to provide their own client already configured
+    /// for the user to provide their own client already configured (backward compatible for older versions of LLMConnect)
     /// </summary>
     /// <param name="options">library options</param>
     /// <param name="httpClient">user defined client</param>
     public LLMConnectClient(LLMConnectClientOptions options, HttpClient httpClient)
-        : this(new LLMProviderFactory(options, httpClient))
+        : this(new LLMProviderFactory(options.ToGeneralOptions(), options.ToEndpointOptions(), httpClient))
     {
         _ownsHttpClient = false;
         _httpClient = httpClient;
 
         if (_logger is null)
             _logger = options.LoggerFactory?.CreateLogger<LLMConnectClient>();
+    }
 
-        _logger?.LogWarning(
-            "Using a user-supplied HttpClient. Retry logic must be configured by the caller.");
+    /// <summary>
+    /// user provides only options (library creates HttpClient)
+    /// </summary>
+    /// <param name="generalOpts"></param>
+    /// <param name="endpointOpts"></param>
+    public LLMConnectClient(LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions? endpointOpts)
+        : this(generalOpts, endpointOpts, 
+              new HttpClient(
+                  new RetryDelegatingHandler(
+                      generalOpts?.MaxRetries ?? 3, 
+                      generalOpts?.LoggerFactory?.CreateLogger<RetryDelegatingHandler>())
+        {
+            InnerHandler = new SocketsHttpHandler
+            {
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5)
+            }
+        }))
+    {
+        _ownsHttpClient = true;
+
+        if (_logger is null)
+            _logger = generalOpts?.LoggerFactory?.CreateLogger<LLMConnectClient>();
+    }
+
+    /// <summary>
+    /// for the user to provide their own client already configured
+    /// </summary>
+    /// <param name="generalOpts">general library options</param>
+    /// <param name="endpointOpts">endpoint-specific options</param>
+    /// <param name="httpClient">user-defined HTTP client</param>
+    public LLMConnectClient(LLMConnectGeneralOptions? generalOpts, LLMConnectEndpointOptions? endpointOpts, HttpClient httpClient)
+    : this(new LLMProviderFactory(generalOpts, endpointOpts, httpClient))
+    {
+        _ownsHttpClient = false;
+        _httpClient = httpClient;
+
+        if (_logger is null)
+            _logger = generalOpts?.LoggerFactory?.CreateLogger<LLMConnectClient>();
+    }
+
+    /// <summary>
+    /// for the user to provide an IHttpClientFactory (backward compatibility for older versions of LLMConnect)
+    /// </summary>
+    /// <param name="options">library options</param>
+    /// <param name="httpClientFactory">user defined client factory</param>
+    public LLMConnectClient(LLMConnectClientOptions options, IHttpClientFactory httpClientFactory)
+        : this(new LLMProviderFactory(options?.ToGeneralOptions(), options?.ToEndpointOptions(), httpClientFactory))
+    {
+        _ownsHttpClient = true;
+
+        if (_logger is null)
+            _logger = options?.LoggerFactory?.CreateLogger<LLMConnectClient>();
     }
 
     /// <summary>
     /// for the user to provide an IHttpClientFactory
     /// </summary>
-    /// <param name="options">library options</param>
-    /// <param name="httpClientFactory">user defined client factory</param>
-    public LLMConnectClient(LLMConnectClientOptions options, IHttpClientFactory httpClientFactory)
-        : this(new LLMProviderFactory(options, httpClientFactory))
+    /// <param name="generalOpts">general library options</param>
+    /// <param name="endpointOpts">endpoint-specific options</param>
+    /// <param name="httpClientFactory">user-defined HTTP client factory</param>
+    public LLMConnectClient(LLMConnectGeneralOptions? generalOpts, LLMConnectEndpointOptions? endpointOpts, IHttpClientFactory httpClientFactory)
+    : this(new LLMProviderFactory(generalOpts, endpointOpts, httpClientFactory))
     {
         _ownsHttpClient = true;
 
         if (_logger is null)
-            _logger = options.LoggerFactory?.CreateLogger<LLMConnectClient>();
+            _logger = generalOpts?.LoggerFactory?.CreateLogger<LLMConnectClient>();
     }
 
     private LLMConnectClient(LLMProviderFactory factory)
@@ -98,6 +150,17 @@ public class LLMConnectClient : ILLMConnectClient, IDisposable
     public IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
         return _provider.StreamAsync(request, cancellationToken);
+    }
+
+    /// <summary>
+    /// Sends an embedding request and returns the embedding response.
+    /// </summary>
+    /// <param name="request">The embedding request, including the input text and generation parameters.</param>
+    /// <param name="cancellationToken">A token used to cancel the request.</param>
+    /// <returns>The completed embedding response.</returns>
+    public async Task<EmbeddingResponse?> GetEmbeddingAsync(EmbeddingRequest request, CancellationToken cancellationToken = default)
+    {
+        return await _provider.GetEmbeddingAsync(request, cancellationToken);
     }
 
     /// <summary>

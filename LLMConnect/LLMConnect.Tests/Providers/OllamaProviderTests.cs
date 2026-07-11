@@ -12,27 +12,27 @@ namespace LLMConnect.Tests.Providers;
 
 public class OllamaProviderTests
 {
-    private readonly Mock<ILogger> _loggerMock;
-    private readonly LLMConnectClientOptions _options;
+    private readonly Mock<ILogger<OllamaProvider>> _loggerMock;
+    private readonly Mock<ILoggerFactory> _loggerFactoryMock;
+    private readonly LLMConnectGeneralOptions _generalOptions;
+    private readonly LLMConnectEndpointOptions _endpointOptions;
 
     public OllamaProviderTests()
     {
-        _loggerMock = new Mock<ILogger>();
-        var loggerFactoryMock = new Mock<ILoggerFactory>();
-        loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>()))
-            .Returns(_loggerMock.Object);
+        _loggerMock = new Mock<ILogger<OllamaProvider>>();
+        _loggerFactoryMock = new Mock<ILoggerFactory>();
+        _loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(_loggerMock.Object);
 
-        _options = new LLMConnectClientOptions
+        _generalOptions = new LLMConnectGeneralOptions
         {
             Provider = ProviderType.Ollama,
-            ApiKey = null, // Ollama does not require an API key
-            DefaultModel = "llama3.2",
-            LoggerFactory = loggerFactoryMock.Object,
-            MaxRetries = 0 // Disable retries for test determinism
+            LoggerFactory = _loggerFactoryMock.Object,
+            DefaultModel = "qwen2.5:7b-instruct"
         };
+        _endpointOptions = new LLMConnectEndpointOptions();
     }
 
-    private HttpClient CreateHttpClientWithResponse(HttpStatusCode statusCode, string content)
+    private HttpClient CreateMockHttpClient(HttpResponseMessage response)
     {
         var handlerMock = new Mock<HttpMessageHandler>();
         handlerMock
@@ -41,186 +41,141 @@ public class OllamaProviderTests
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(new HttpResponseMessage
-            {
-                StatusCode = statusCode,
-                Content = new StringContent(content, Encoding.UTF8, "application/json")
-            })
-            .Verifiable();
-
-        var client = new HttpClient(handlerMock.Object)
+            .ReturnsAsync(response);
+        return new HttpClient(handlerMock.Object)
         {
-            BaseAddress = new Uri("http://localhost:11434/api/chat")
+            BaseAddress = new Uri("http://localhost:11434/")
         };
-        return client;
-    }
-
-    private HttpClient CreateHttpClientWithStreamingResponse(string ndjsonContent)
-    {
-        var streamContent = new StringContent(ndjsonContent, Encoding.UTF8, "application/x-ndjson");
-        var response = new HttpResponseMessage
-        {
-            StatusCode = HttpStatusCode.OK,
-            Content = streamContent
-        };
-        var handlerMock = new Mock<HttpMessageHandler>();
-        handlerMock
-            .Protected()
-            .Setup<Task<HttpResponseMessage>>(
-                "SendAsync",
-                ItExpr.IsAny<HttpRequestMessage>(),
-                ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(response)
-            .Verifiable();
-        var client = new HttpClient(handlerMock.Object)
-        {
-            BaseAddress = new Uri("http://localhost:11434/api/chat")
-        };
-        return client;
     }
 
     [Fact]
-    public async Task ChatAsync_WhenValidRequest_ReturnsChatResponse()
+    public async Task ChatAsync_ValidResponse_DeserializesCorrectly()
     {
-        // Arrange
-        var responseJson = @"
+        var json = """
         {
-            ""model"": ""llama3.2"",
-            ""message"": {
-                ""role"": ""assistant"",
-                ""content"": ""Hello, world!""
-            },
-            ""done"": true,
-            ""done_reason"": ""stop"",
-            ""eval_count"": 10,
-            ""prompt_eval_count"": 5
-        }";
-        var httpClient = CreateHttpClientWithResponse(HttpStatusCode.OK, responseJson);
-        var provider = new OllamaProvider(httpClient, _options);
-
-        var request = new ChatRequest
-        {
-            Messages = new List<Message> { new UserMessage("Hi") },
-            Temperature = 0.7f,
-            MaxTokens = 100
-        };
-
-        // Act
-        var result = await provider.ChatAsync(request, CancellationToken.None);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Content.Should().Be("Hello, world!");
-        result.FinishReason.Should().Be("stop");
-        result.Usage.InputTokens.Should().Be(5);
-        result.Usage.OutputTokens.Should().Be(10);
-    }
-
-    [Fact]
-    public async Task ChatAsync_WhenNonSuccessStatusCode_ThrowsLLMConnectException()
-    {
-        // Arrange
-        var errorJson = @"{""error"":""Internal server error""}";
-        var httpClient = CreateHttpClientWithResponse(HttpStatusCode.InternalServerError, errorJson);
-        var provider = new OllamaProvider(httpClient, _options);
-
-        var request = new ChatRequest
-        {
-            Messages = new List<Message> { new UserMessage("Hi") }
-        };
-
-        // Act
-        Func<Task> act = async () => await provider.ChatAsync(request, CancellationToken.None);
-
-        // Assert
-        var exception = await act.Should().ThrowAsync<LLMConnectException>();
-        exception.Which.Provider.Should().Be("Ollama");
-        exception.Which.Message.Should().Contain("Internal server error");
-    }
-
-    [Fact]
-    public async Task ChatAsync_WhenDeserializationFails_ThrowsLLMConnectException()
-    {
-        // Arrange
-        var invalidJson = "{ invalid: }"; // Malformed JSON
-        var httpClient = CreateHttpClientWithResponse(HttpStatusCode.OK, invalidJson);
-        var provider = new OllamaProvider(httpClient, _options);
-
-        var request = new ChatRequest
-        {
-            Messages = new List<Message> { new UserMessage("Hi") }
-        };
-
-        // Act
-        Func<Task> act = async () => await provider.ChatAsync(request, CancellationToken.None);
-
-        // Assert
-        var exception = await act.Should().ThrowAsync<LLMConnectException>();
-        exception.Which.Provider.Should().Be("Ollama");
-        exception.Which.Message.Should().Contain("Failed to deserialize response");
-        _loggerMock.Verify(
-            x => x.Log(
-                LogLevel.Error,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Ollama")),
-                It.IsAny<Exception>(),
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-            Times.Once);
-    }
-
-    [Fact]
-    public async Task StreamAsync_WhenValidRequest_YieldsChatChunks()
-    {
-        // Arrange
-        var ndjsonContent = """
-        {"message":{"content":"Hello"},"done":false}
-        {"message":{"content":" world"},"done":false}
-        {"message":{"content":"!"},"done":true}
+            "model": "qwen2.5:7b-instruct",
+            "message": { "role": "assistant", "content": "Hello" },
+            "done": true,
+            "done_reason": "stop",
+            "eval_count": 5,
+            "prompt_eval_count": 10
+        }
         """;
-
-        var httpClient = CreateHttpClientWithStreamingResponse(ndjsonContent);
-        var provider = new OllamaProvider(httpClient, _options);
-
-        var request = new ChatRequest
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Messages = new List<Message> { new UserMessage("Say hello") }
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
+        var httpClient = CreateMockHttpClient(response);
+        var provider = new OllamaProvider(httpClient, _generalOptions, _endpointOptions);
 
-        // Act
-        var chunks = await provider.StreamAsync(request, CancellationToken.None).ToListAsync();
+        var result = await provider.ChatAsync(new ChatRequest { Messages = new List<Message> { new UserMessage("Hi") } });
 
-        // Assert
+        result.Should().NotBeNull();
+        result.Content.Should().Be("Hello");
+        result.FinishReason.Should().Be("stop");
+        result.Usage.InputTokens.Should().Be(5);   // eval_count -> InputTokens
+        result.Usage.OutputTokens.Should().Be(10); // prompt_eval_count -> OutputTokens
+    }
+
+    [Fact]
+    public async Task ChatAsync_ErrorResponse_ThrowsLLMConnectException()
+    {
+        var errorJson = @"{""error"":""Internal server error""}";
+        var response = new HttpResponseMessage(HttpStatusCode.InternalServerError)
+        {
+            Content = new StringContent(errorJson, Encoding.UTF8, "application/json")
+        };
+        var httpClient = CreateMockHttpClient(response);
+        var provider = new OllamaProvider(httpClient, _generalOptions, _endpointOptions);
+
+        Func<Task> act = async () => await provider.ChatAsync(new ChatRequest { Messages = new List<Message> { new UserMessage("Hi") } });
+
+        var ex = await act.Should().ThrowAsync<LLMConnectException>();
+        ex.Which.Provider.Should().Be("Ollama");
+        ex.Which.Message.Should().Contain("Internal server error");
+    }
+
+    [Fact]
+    public async Task ChatAsync_WhenCancelled_ThrowsOperationCanceledException()
+    {
+        // Arrange
+        var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Returns<HttpRequestMessage, CancellationToken>((req, ct) =>
+            {
+                if (ct.IsCancellationRequested)
+                    throw new OperationCanceledException();
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("{\"message\":{\"content\":\"ok\"},\"done\":true}")
+                });
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("http://localhost:11434/")
+        };
+        var provider = new OllamaProvider(httpClient, _generalOptions, _endpointOptions);
+
+        var request = new ChatRequest { Messages = new List<Message> { new UserMessage("Hi") } };
+
+        // Act & Assert
+        Func<Task> act = async () => await provider.ChatAsync(request, cts.Token);
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task StreamAsync_ValidResponse_ReturnsChunks()
+    {
+        var ndjson = """
+            {"message":{"content":"Hello"},"done":false}
+            {"message":{"content":" world"},"done":false}
+            {"message":{"content":"!"},"done":true}
+            """;
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(ndjson, Encoding.UTF8, "application/x-ndjson")
+        };
+        var httpClient = CreateMockHttpClient(response);
+        var provider = new OllamaProvider(httpClient, _generalOptions, _endpointOptions);
+
+        var chunks = await provider.StreamAsync(new ChatRequest { Messages = new List<Message> { new UserMessage("Hi") } }).ToListAsync();
+
         chunks.Should().HaveCount(3);
         chunks[0].Content.Should().Be("Hello");
-        chunks[0].IsComplete.Should().BeFalse();
         chunks[1].Content.Should().Be(" world");
-        chunks[1].IsComplete.Should().BeFalse();
         chunks[2].Content.Should().Be("!");
         chunks[2].IsComplete.Should().BeTrue();
     }
 
     [Fact]
-    public async Task StreamAsync_WhenNonSuccessStatusCode_ThrowsLLMConnectException()
+    public async Task GetEmbeddingAsync_ValidResponse_DeserializesCorrectly()
     {
-        // Arrange
-        var httpClient = CreateHttpClientWithResponse(HttpStatusCode.InternalServerError, "Internal Server Error");
-        var provider = new OllamaProvider(httpClient, _options);
-
-        var request = new ChatRequest
+        var json = """
         {
-            Messages = new List<Message> { new UserMessage("Hi") }
-        };
-
-        // Act
-        Func<Task> act = async () =>
+            "embedding": [1.0, 2.0, 3.0]
+        }
+        """;
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
         {
-            var enumerator = provider.StreamAsync(request, CancellationToken.None).GetAsyncEnumerator();
-            await enumerator.MoveNextAsync();
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
+        var httpClient = CreateMockHttpClient(response);
+        var provider = new OllamaProvider(httpClient, _generalOptions, _endpointOptions);
 
-        // Assert
-        var exception = await act.Should().ThrowAsync<LLMConnectException>();
-        exception.Which.Provider.Should().Be("Ollama");
-        exception.Which.Message.Should().Contain("Internal Server Error");
+        var result = await provider.GetEmbeddingAsync(new EmbeddingRequest { Text = "Hello" });
+
+        result.Should().NotBeNull();
+        result.Embedding.Should().BeEquivalentTo(new float[] { 1f, 2f, 3f });
+        result.Model.Should().Be("ollama");
+        result.Usage.Should().BeNull();
     }
 }

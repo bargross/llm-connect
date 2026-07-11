@@ -1,8 +1,9 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using LLMConnect.Models;
+using Microsoft.Extensions.Logging;
 
 namespace LLMConnect;
 
-internal class OllamaChatRequestValidator : ChatRequestValidatorBase, IChatRequestValidator
+internal class OllamaChatRequestValidator : ChatRequestValidatorBase
 {
     protected override void ValidateProviderSpecific(ChatRequest request, ILogger? logger)
     {

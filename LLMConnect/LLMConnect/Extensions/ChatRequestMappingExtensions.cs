@@ -41,7 +41,7 @@ internal static class ChatRequestMappingExtensions
 
         var openAiRequest = new OpenAIChatRequest
         {
-            Model = model ?? string.Empty,
+            Model = model,
             Messages = messages,
             Temperature = request.Temperature != 0.0f ? request.Temperature : null,
             TopP = request.TopP != 0.0f ? request.TopP : null,
@@ -51,7 +51,9 @@ internal static class ChatRequestMappingExtensions
             PresencePenalty = request.PresencePenalty,
             ResponseFormat = request.ResponseFormat != null ? new OpenAIResponseFormat { Type = request.ResponseFormat } : null,
             Seed = request.Seed,
-            User = request.User
+            User = request.User,
+            Tools = request.MapOpenAITools(),
+            ToolChoice = request.MapOpenAIToolChoice()
         };
 
         if (request.ExtraParameters != null && request.ExtraParameters.Count > 0)
@@ -82,7 +84,9 @@ internal static class ChatRequestMappingExtensions
             Temperature = request.Temperature != 0.0f ? request.Temperature : null,
             TopP = request.TopP != 0.0f ? request.TopP : null,
             Stream = null, // Set externally
-            StopSequences = request.StopSequences
+            StopSequences = request.StopSequences,
+            Tools = request.MapAnthropicTools(),
+            ToolChoice = request.MapAnthropicToolChoice()
         };
     }
 
@@ -121,7 +125,9 @@ internal static class ChatRequestMappingExtensions
         {
             Contents = contents,
             SystemInstruction = systemContent,
-            GenerationConfig = generationConfig
+            GenerationConfig = generationConfig,
+            Tools = request.MapGoogleTools(),
+            ToolConfig = request.MapGoogleToolChoice()
         };
     }
 
@@ -140,6 +146,8 @@ internal static class ChatRequestMappingExtensions
         {
             Model = model,
             Messages = messages,
+            Tools = request.MapOllamaTools(),
+            ToolChoice = request.MapOllamaToolChoice(),
             Options = new OllamaOptions
             {
                 Temperature = request.Temperature != 0.0f ? request.Temperature : null,

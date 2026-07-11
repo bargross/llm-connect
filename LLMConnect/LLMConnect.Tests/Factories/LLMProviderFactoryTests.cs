@@ -10,204 +10,169 @@ public class LLMProviderFactoryTests
 {
     private readonly Mock<ILogger> _loggerMock;
     private readonly Mock<ILoggerFactory> _loggerFactoryMock;
-    private readonly LLMConnectClientOptions _options;
+    private readonly LLMConnectGeneralOptions _validGeneralOptions;
+    private readonly LLMConnectEndpointOptions _validEndpointOptions;
 
     public LLMProviderFactoryTests()
     {
         _loggerMock = new Mock<ILogger>();
         _loggerFactoryMock = new Mock<ILoggerFactory>();
-        _loggerFactoryMock
-            .Setup(x => x.CreateLogger(It.IsAny<string>()))
-            .Returns(_loggerMock.Object);
+        _loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(_loggerMock.Object);
 
-        _options = new LLMConnectClientOptions
+        _validGeneralOptions = new LLMConnectGeneralOptions
         {
             Provider = ProviderType.OpenAI,
             ApiKey = "test-key",
-            LoggerFactory = _loggerFactoryMock.Object,
-            Timeout = TimeSpan.FromSeconds(30),
-            MaxRetries = 3
+            LoggerFactory = _loggerFactoryMock.Object
         };
+        _validEndpointOptions = new LLMConnectEndpointOptions();
+    }
+
+    // ---------- Constructor with HttpClient ----------
+
+    [Fact]
+    public void Constructor_WithHttpClient_WhenGeneralOptionsNull_ThrowsArgumentNullException()
+    {
+        var act = () => new LLMProviderFactory(null, _validEndpointOptions, new HttpClient());
+        act.Should().Throw<ArgumentNullException>().WithParameterName("generalOptions");
     }
 
     [Fact]
-    public void Constructor_WithHttpClient_ValidatesOptions()
+    public void Constructor_WithHttpClient_WhenEndpointOptionsNull_ThrowsArgumentNullException()
     {
-        // Arrange
-        var httpClient = new HttpClient();
-
-        // Act
-        var factory = new LLMProviderFactory(_options, httpClient);
-
-        // Assert
-        factory.Should().NotBeNull();
-        // Validation is called in constructor; if options were invalid, it would have thrown.
-        // We can verify that validation was called by checking that the logger was used.
-        // (Hard to mock static validation, but we trust it was called.)
+        var act = () => new LLMProviderFactory(_validGeneralOptions, null, new HttpClient());
+        act.Should().Throw<ArgumentNullException>().WithParameterName("endpointOptions");
     }
 
     [Fact]
-    public void Constructor_WithHttpClient_WhenOptionsIsNull_ThrowsArgumentNullException()
+    public void Constructor_WithHttpClient_WhenHttpClientNull_ThrowsArgumentNullException()
     {
-        // Arrange
-        var httpClient = new HttpClient();
+        var act = () => new LLMProviderFactory(_validGeneralOptions, _validEndpointOptions, null as HttpClient);
 
-        // Act
-        Action act = () => new LLMProviderFactory(null!, httpClient);
-
-        // Assert
-        act.Should().Throw<ArgumentNullException>()
-            .WithParameterName("options");
+        act.Should().Throw<ArgumentNullException>().WithParameterName("httpClient");
     }
 
     [Fact]
-    public void Constructor_WithHttpClient_WhenHttpClientIsNull_ThrowsArgumentNullException()
+    public void Constructor_WithHttpClient_WithInvalidOptions_ThrowsValidationException()
     {
-        // Act
-        Action act = () => new LLMProviderFactory(_options, null! as HttpClient);
+        var invalidOptions = new LLMConnectGeneralOptions
+        {
+            Provider = ProviderType.OpenAI,
+            ApiKey = null // missing API key
+        };
+        var act = () => new LLMProviderFactory(invalidOptions, _validEndpointOptions, new HttpClient());
+        act.Should().Throw<ArgumentException>().WithMessage("*API key*");
+    }
 
-        // Assert
-        act.Should().Throw<ArgumentNullException>()
-            .WithParameterName("httpClient");
+    // ---------- Constructor with IHttpClientFactory ----------
+
+    [Fact]
+    public void Constructor_WithHttpClientFactory_WhenGeneralOptionsNull_ThrowsArgumentNullException()
+    {
+        var factoryMock = new Mock<IHttpClientFactory>();
+        var act = () => new LLMProviderFactory(null, _validEndpointOptions, factoryMock.Object);
+        act.Should().Throw<ArgumentNullException>().WithParameterName("generalOptions");
     }
 
     [Fact]
-    public void Constructor_WithHttpClientFactory_CreatesClient()
+    public void Constructor_WithHttpClientFactory_WhenEndpointOptionsNull_ThrowsArgumentNullException()
     {
-        // Arrange
-        var httpClientFactoryMock = new Mock<IHttpClientFactory>();
-        var expectedClient = new HttpClient();
-        httpClientFactoryMock
-            .Setup(x => x.CreateClient("LLMConnect"))
-            .Returns(expectedClient);
-
-        // Act
-        var factory = new LLMProviderFactory(_options, httpClientFactoryMock.Object);
-
-        // Assert
-        factory.Should().NotBeNull();
+        var factoryMock = new Mock<IHttpClientFactory>();
+        var act = () => new LLMProviderFactory(_validGeneralOptions, null, factoryMock.Object);
+        act.Should().Throw<ArgumentNullException>().WithParameterName("endpointOptions");
     }
 
     [Fact]
     public void Constructor_WithHttpClientFactory_WhenFactoryReturnsNull_ThrowsInvalidOperationException()
     {
-        // Arrange
-        var httpClientFactoryMock = new Mock<IHttpClientFactory>();
-        httpClientFactoryMock
-            .Setup(x => x.CreateClient("LLMConnect"))
-            .Returns((HttpClient?)null!);
-
-        // Act
-        Action act = () => new LLMProviderFactory(_options, httpClientFactoryMock.Object);
-
-        // Assert
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("Failed to create HttpClient from factory.");
+        var factoryMock = new Mock<IHttpClientFactory>();
+        factoryMock.Setup(x => x.CreateClient("LLMConnect")).Returns((HttpClient)null!);
+        var act = () => new LLMProviderFactory(_validGeneralOptions, _validEndpointOptions, factoryMock.Object);
+        act.Should().Throw<InvalidOperationException>().WithMessage("Failed to create HttpClient from factory.");
     }
 
     [Fact]
-    public void Constructor_WithHttpClientFactory_WhenOptionsIsNull_ThrowsArgumentNullException()
+    public void Constructor_WithHttpClientFactory_ValidOptions_CreatesClient()
     {
-        // Arrange
-        var httpClientFactoryMock = new Mock<IHttpClientFactory>();
-        httpClientFactoryMock
-            .Setup(x => x.CreateClient("LLMConnect"))
-            .Returns(new HttpClient()); // Return a valid client
+        var expectedClient = new HttpClient();
+        var factoryMock = new Mock<IHttpClientFactory>();
+        factoryMock.Setup(x => x.CreateClient("LLMConnect")).Returns(expectedClient);
 
-        // Act
-        Action act = () => new LLMProviderFactory(null!, httpClientFactoryMock.Object);
-
-        // Assert
-        act.Should().Throw<ArgumentNullException>()
-            .WithParameterName("options");
+        var factory = new LLMProviderFactory(_validGeneralOptions, _validEndpointOptions, factoryMock.Object);
+        factory.Should().NotBeNull();
     }
+
+    // ---------- CreateProvider ----------
 
     [Theory]
     [InlineData(ProviderType.OpenAI, typeof(OpenAIProvider))]
     [InlineData(ProviderType.Anthropic, typeof(AnthropicProvider))]
     [InlineData(ProviderType.Google, typeof(GoogleProvider))]
     [InlineData(ProviderType.Ollama, typeof(OllamaProvider))]
-    public void CreateProvider_ForSupportedProviders_ReturnsCorrectProvider(ProviderType provider, Type expectedType)
+    public void CreateProvider_ForSupportedProvider_ReturnsCorrectProviderType(ProviderType provider, Type expectedType)
     {
-        // Arrange
-        var options = new LLMConnectClientOptions
+        var general = new LLMConnectGeneralOptions
         {
             Provider = provider,
             ApiKey = provider != ProviderType.Ollama ? "test-key" : null,
-            LoggerFactory = _loggerFactoryMock.Object,
-            Timeout = TimeSpan.FromSeconds(30),
-            MaxRetries = 3
+            LoggerFactory = _loggerFactoryMock.Object
         };
-        var httpClient = new HttpClient();
-        var factory = new LLMProviderFactory(options, httpClient);
-
-        // Act
+        var factory = new LLMProviderFactory(general, _validEndpointOptions, new HttpClient());
         var (client, providerInstance) = factory.CreateProvider();
 
-        // Assert
         providerInstance.Should().BeOfType(expectedType);
-        client.Should().Be(httpClient);
+        client.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void CreateProvider_ForUnsupportedProvider_ThrowsNotSupportedException()
+    {
+        var general = new LLMConnectGeneralOptions
+        {
+            Provider = (ProviderType)999,
+            ApiKey = "test-key",
+            LoggerFactory = _loggerFactoryMock.Object
+        };
+
+        var act = () => new LLMProviderFactory(general, _validEndpointOptions, new HttpClient()).CreateProvider();
+        act.Should().Throw<NotSupportedException>().Which.Message.Should().Contain("999");
     }
 
     [Fact]
     public void CreateProvider_ConfiguresHttpClient()
     {
-        // Arrange
         var httpClient = new HttpClient();
-        var factory = new LLMProviderFactory(_options, httpClient);
+        var factory = new LLMProviderFactory(_validGeneralOptions, _validEndpointOptions, httpClient);
+        var (configuredClient, _) = factory.CreateProvider();
 
-        // Act
-        var (client, _) = factory.CreateProvider();
-
-        // Assert
-        // The client should be configured with BaseAddress and headers
-        // We can verify that the client is the same instance and that it has been configured
-        client.Should().Be(httpClient);
-        // BaseAddress should be set by HttpClientConfigurator
-        // We can't easily verify the exact headers without making them public,
-        // but we can trust that ConfigureForProvider was called.
+        // Verify that the client's BaseAddress is set (by HttpClientConfigurator)
+        configuredClient.BaseAddress.Should().NotBeNull();
+        configuredClient.BaseAddress!.ToString().Should().Be("https://api.openai.com/v1/");
     }
 
     [Fact]
-    public void Constructor_WhenOptionsAreInvalid_ThrowsValidationException()
+    public void CreateProvider_ForAzureOpenAI_ReturnsAzureOpenAIProvider()
     {
         // Arrange
-        var invalidOptions = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.OpenAI,
-            ApiKey = null!, // Missing API key - should throw validation
-            LoggerFactory = _loggerFactoryMock.Object,
-            Timeout = TimeSpan.FromSeconds(30),
-            MaxRetries = 3
-        };
         var httpClient = new HttpClient();
+        var generalOptions = new LLMConnectGeneralOptions
+        {
+            Provider = ProviderType.AzureOpenAI,
+            ApiKey = "test-key",
+            LoggerFactory = _loggerFactoryMock.Object,
+            DefaultModel = "gpt-4"
+        };
+        var endpointOptions = new LLMConnectEndpointOptions
+        {
+            AzureResourceName = "my-resource",
+            AzureDeploymentName = "my-deployment",
+            AzureApiVersion = "2024-02-15-preview"
+        };
 
         // Act
-        Action act = () => new LLMProviderFactory(invalidOptions, httpClient);
+        var (_, provider) = new LLMProviderFactory(generalOptions, endpointOptions, httpClient).CreateProvider();
 
         // Assert
-        act.Should().Throw<ArgumentException>()
-            .WithMessage("Missing api key for provider OpenAI*");
-    }
-
-    [Fact]
-    public void Constructor_WithHttpClient_ValidatesOptions_WhenOllamaWithNoApiKey_DoesNotThrow()
-    {
-        // Arrange
-        var ollamaOptions = new LLMConnectClientOptions
-        {
-            Provider = ProviderType.Ollama,
-            ApiKey = null, // Ollama does not require an API key
-            LoggerFactory = _loggerFactoryMock.Object,
-            Timeout = TimeSpan.FromSeconds(30),
-            MaxRetries = 3
-        };
-        var httpClient = new HttpClient();
-
-        // Act
-        Action act = () => new LLMProviderFactory(ollamaOptions, httpClient);
-
-        // Assert
-        act.Should().NotThrow();
+        provider.Should().BeOfType<AzureOpenAIProvider>();
     }
 }

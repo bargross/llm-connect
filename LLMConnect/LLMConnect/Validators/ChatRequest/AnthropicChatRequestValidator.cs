@@ -1,8 +1,9 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using LLMConnect.Models;
+using Microsoft.Extensions.Logging;
 
 namespace LLMConnect;
 
-internal class AnthropicChatRequestValidator : ChatRequestValidatorBase, IChatRequestValidator
+internal class AnthropicChatRequestValidator : ChatRequestValidatorBase
 {
     protected override void ValidateProviderSpecific(ChatRequest request, ILogger? logger)
     {

@@ -27,4 +27,13 @@ public interface ILLMConnectClient
     /// <returns>An asynchronous sequence of response chunks, ending with a chunk where <see cref="ChatChunk.IsComplete"/> is <see langword="true"/>.</returns>
     /// <exception cref="LLMConnect.Exceptions.LLMConnectException">Thrown when the provider returns an error or the request otherwise fails.</exception>
     IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sends an embedding request and returns the embedding response.
+    /// </summary>
+    /// <param name="request">The embedding request, including the input text and generation parameters.</param>
+    /// <param name="cancellationToken">A token used to cancel the request.</param>
+    /// <returns>The completed embedding response.</returns>
+    /// <exception cref="LLMConnect.Exceptions.LLMConnectException">Thrown when the provider returns an error or the request otherwise fails.</exception>
+    Task<EmbeddingResponse?> GetEmbeddingAsync(EmbeddingRequest request, CancellationToken cancellationToken = default);
 }

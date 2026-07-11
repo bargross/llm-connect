@@ -7,7 +7,7 @@ namespace LLMConnect;
 
 internal class GoogleStreamChunkParser : ChunkParserBase<GoogleStreamChunkParser>, IStreamChunkParser
 {
-    public GoogleStreamChunkParser(LLMConnectClientOptions options) : base(options) { }
+    public GoogleStreamChunkParser(LLMConnectGeneralOptions options) : base(options) { }
 
     public ChatChunk? Parse(StreamEvent evt)
     {
@@ -18,35 +18,55 @@ internal class GoogleStreamChunkParser : ChunkParserBase<GoogleStreamChunkParser
         {
             var chunk = JsonSerializer.Deserialize<GoogleChatResponse>(evt.Data);
             var candidate = chunk?.Candidates?.FirstOrDefault();
-            var text = candidate?.Content?.Parts?.FirstOrDefault()?.Text;
+            if (candidate == null)
+                return null;
 
-            if (!string.IsNullOrEmpty(text))
+            var result = new ChatChunk();
+
+            // Collect all text parts and function call parts
+            var textParts = new List<string>();
+            var functionParts = new List<GoogleFunctionCall>();
+
+            if (candidate.Content?.Parts != null)
             {
-                return new ChatChunk
+                foreach (var part in candidate.Content.Parts)
                 {
-                    Content = text,
-                    IsComplete = false,
-                    FinishReason = null
-                };
+                    if (!string.IsNullOrEmpty(part.Text))
+                        textParts.Add(part.Text);
+                    if (part.FunctionCall != null)
+                        functionParts.Add(part.FunctionCall);
+                }
             }
 
-            // If this chunk contains a finishReason, yield the final chunk
-            if (candidate?.FinishReason != null)
+            // Combine text parts (if multiple)
+            if (textParts.Any())
+                result.Content = string.Concat(textParts);
+
+            // Handle all function calls
+            if (functionParts.Any())
             {
-                return new ChatChunk
+                result.ToolCalls = functionParts.Select((fc, idx) => new ToolCallDelta
                 {
-                    Content = string.Empty,
-                    IsComplete = true,
-                    FinishReason = candidate.FinishReason
-                };
+                    Index = idx,
+                    Id = fc.Name, // Google uses function name as ID
+                    Name = fc.Name,
+                    ArgumentsDelta = JsonSerializer.Serialize(fc.Args)
+                }).ToList();
             }
+
+            // Finish reason
+            if (!string.IsNullOrEmpty(candidate.FinishReason))
+            {
+                result.IsComplete = true;
+                result.FinishReason = candidate.FinishReason;
+            }
+
+            return result;
         }
         catch (JsonException ex)
         {
-            _logger?.LogInformation($"Ignoring malformed chunks, reason: {ex.Message}");
-            // Ignore malformed chunks
+            _logger?.LogInformation($"Ignoring malformed chunk, reason: {ex.Message}");
+            return null;
         }
-
-        return null;
     }
 }

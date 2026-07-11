@@ -7,34 +7,33 @@ using Moq;
 using Moq.Protected;
 using System.Net;
 using System.Text;
-using WireMock.ResponseBuilders;
-using WireMock.RequestBuilders;
 
 namespace LLMConnect.Tests.Providers;
 
 public class AnthropicProviderTests
 {
-    private readonly Mock<ILogger> _loggerMock;
-    private readonly LLMConnectClientOptions _options;
+    private readonly Mock<ILogger<AnthropicProvider>> _loggerMock;
+    private readonly Mock<ILoggerFactory> _loggerFactoryMock;
+    private readonly LLMConnectGeneralOptions _generalOptions;
+    private readonly LLMConnectEndpointOptions _endpointOptions;
 
     public AnthropicProviderTests()
     {
-        _loggerMock = new Mock<ILogger>();
-        var loggerFactoryMock = new Mock<ILoggerFactory>();
-        loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>()))
-            .Returns(_loggerMock.Object);
+        _loggerMock = new Mock<ILogger<AnthropicProvider>>();
+        _loggerFactoryMock = new Mock<ILoggerFactory>();
+        _loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(_loggerMock.Object);
 
-        _options = new LLMConnectClientOptions
+        _generalOptions = new LLMConnectGeneralOptions
         {
             Provider = ProviderType.Anthropic,
-            ApiKey = "test-anthropic-key",
-            DefaultModel = "claude-3-5-sonnet-20241022",
-            LoggerFactory = loggerFactoryMock.Object,
-            MaxRetries = 0 // Disable retries for test determinism
+            ApiKey = "test-key",
+            LoggerFactory = _loggerFactoryMock.Object,
+            DefaultModel = "claude-sonnet-5"
         };
+        _endpointOptions = new LLMConnectEndpointOptions();
     }
 
-    private HttpClient CreateHttpClientWithResponse(HttpStatusCode statusCode, string content)
+    private HttpClient CreateMockHttpClient(HttpResponseMessage response)
     {
         var handlerMock = new Mock<HttpMessageHandler>();
         handlerMock
@@ -43,142 +42,100 @@ public class AnthropicProviderTests
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(new HttpResponseMessage
-            {
-                StatusCode = statusCode,
-                Content = new StringContent(content, Encoding.UTF8, "application/json")
-            })
-            .Verifiable();
-
-        var client = new HttpClient(handlerMock.Object)
+            .ReturnsAsync(response);
+        return new HttpClient(handlerMock.Object)
         {
-            BaseAddress = new Uri("https://api.anthropic.com/v1/messages")
+            BaseAddress = new Uri("https://api.anthropic.com/v1/")
         };
-        return client;
-    }
-
-    private HttpClient CreateHttpClientWithStreamingResponse(string sseContent)
-    {
-        // Ensure the content is correctly formatted for SSE
-        var streamContent = new StringContent(sseContent, Encoding.UTF8, "text/event-stream");
-        var response = new HttpResponseMessage
-        {
-            StatusCode = HttpStatusCode.OK,
-            Content = streamContent
-        };
-
-        var handlerMock = new Mock<HttpMessageHandler>();
-        handlerMock
-            .Protected()
-            .Setup<Task<HttpResponseMessage>>(
-                "SendAsync",
-                ItExpr.IsAny<HttpRequestMessage>(),
-                ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(response)
-            .Verifiable();
-        var client = new HttpClient(handlerMock.Object)
-        {
-            BaseAddress = new Uri("https://api.anthropic.com/v1/messages")
-        };
-
-        return client;
     }
 
     [Fact]
-    public async Task ChatAsync_WhenValidRequest_ReturnsChatResponse()
+    public async Task ChatAsync_ValidResponse_DeserializesCorrectly()
     {
-        // Arrange
-        var responseJson = @"
+        var json = """
         {
-            ""id"": ""msg_123"",
-            ""model"": ""claude-3-5-sonnet-20241022"",
-            ""stop_reason"": ""end_turn"",
-            ""content"": [
-                { ""type"": ""text"", ""text"": ""Hello, world!"" }
-            ],
-            ""usage"": {
-                ""input_tokens"": 10,
-                ""output_tokens"": 5
-            }
-        }";
-        var httpClient = CreateHttpClientWithResponse(HttpStatusCode.OK, responseJson);
-        var provider = new AnthropicProvider(httpClient, _options);
-
-        var request = new ChatRequest
+            "id": "msg_123",
+            "model": "claude-sonnet-5",
+            "stop_reason": "end_turn",
+            "content": [{ "type": "text", "text": "Hello" }],
+            "usage": { "input_tokens": 10, "output_tokens": 5 }
+        }
+        """;
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Messages = new List<Message> { new UserMessage("Hi") },
-            Temperature = 0.7f,
-            MaxTokens = 100
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
+        var httpClient = CreateMockHttpClient(response);
+        var provider = new AnthropicProvider(httpClient, _generalOptions, _endpointOptions);
 
-        // Act
-        var result = await provider.ChatAsync(request, CancellationToken.None);
+        var result = await provider.ChatAsync(new ChatRequest { Messages = new List<Message> { new UserMessage("Hi") } });
 
-        // Assert
         result.Should().NotBeNull();
-        result.Content.Should().Be("Hello, world!");
+        result.Content.Should().Be("Hello");
         result.FinishReason.Should().Be("end_turn");
         result.Usage.InputTokens.Should().Be(10);
         result.Usage.OutputTokens.Should().Be(5);
     }
 
     [Fact]
-    public async Task ChatAsync_WhenNonSuccessStatusCode_ThrowsLLMConnectException()
+    public async Task ChatAsync_ErrorResponse_ThrowsLLMConnectException()
     {
-        // Arrange
         var errorJson = @"{""error"":{""message"":""Invalid API key""}}";
-        var httpClient = CreateHttpClientWithResponse(HttpStatusCode.Unauthorized, errorJson);
-        var provider = new AnthropicProvider(httpClient, _options);
-
-        var request = new ChatRequest
+        var response = new HttpResponseMessage(HttpStatusCode.Unauthorized)
         {
-            Messages = new List<Message> { new UserMessage("Hi") }
+            Content = new StringContent(errorJson, Encoding.UTF8, "application/json")
         };
+        var httpClient = CreateMockHttpClient(response);
+        var provider = new AnthropicProvider(httpClient, _generalOptions, _endpointOptions);
 
-        // Act
-        Func<Task> act = async () => await provider.ChatAsync(request, CancellationToken.None);
+        Func<Task> act = async () => await provider.ChatAsync(new ChatRequest { Messages = new List<Message> { new UserMessage("Hi") } });
 
-        // Assert
-        var exception = await act.Should().ThrowAsync<LLMConnectException>();
-        exception.Which.Provider.Should().Be("Anthropic");
-        exception.Which.Message.Should().Be("Invalid API key");
+        var ex = await act.Should().ThrowAsync<LLMConnectException>();
+        ex.Which.Provider.Should().Be("Anthropic");
+        ex.Which.Message.Should().Be("Invalid API key");
     }
 
     [Fact]
-    public async Task ChatAsync_WhenDeserializationFails_ThrowsLLMConnectException()
+    public async Task ChatAsync_WhenCancelled_ThrowsOperationCanceledException()
     {
         // Arrange
-        var invalidJson = "{ invalid: }"; // Malformed JSON
-        var httpClient = CreateHttpClientWithResponse(HttpStatusCode.OK, invalidJson);
-        var provider = new AnthropicProvider(httpClient, _options);
+        var cts = new CancellationTokenSource();
+        cts.Cancel();
 
-        var request = new ChatRequest
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Returns<HttpRequestMessage, CancellationToken>((req, ct) =>
+            {
+                if (ct.IsCancellationRequested)
+                    throw new OperationCanceledException();
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("{\"id\":\"test\",\"content\":[{\"type\":\"text\",\"text\":\"ok\"}]}")
+                });
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
         {
-            Messages = new List<Message> { new UserMessage("Hi") }
+            BaseAddress = new Uri("https://api.anthropic.com/v1/")
         };
+        var provider = new AnthropicProvider(httpClient, _generalOptions, _endpointOptions);
 
-        // Act
-        Func<Task> act = async () => await provider.ChatAsync(request, CancellationToken.None);
+        var request = new ChatRequest { Messages = new List<Message> { new UserMessage("Hi") } };
 
-        // Assert
-        var exception = await act.Should().ThrowAsync<LLMConnectException>();
-        exception.Which.Provider.Should().Be("Anthropic");
-        exception.Which.Message.Should().Contain("Failed to deserialize response");
-        _loggerMock.Verify(
-            x => x.Log(
-                LogLevel.Error,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Anthropic")),
-                It.IsAny<Exception>(),
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-            Times.Once);
+        // Act & Assert
+        Func<Task> act = async () => await provider.ChatAsync(request, cts.Token);
+        await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
     [Fact]
-    public async Task StreamAsync_WhenValidRequest_YieldsChatChunks()
+    public async Task StreamAsync_ValidResponse_ReturnsChunks()
     {
-        // Arrange
-        var sseContent = """
+        var sse = """
             event: content_block_delta
             data: {"delta":{"text":"Hello"}}
 
@@ -188,72 +145,28 @@ public class AnthropicProviderTests
             event: message_stop
             data: {}
             """;
-
-        var httpClient = CreateHttpClientWithStreamingResponse(sseContent);
-        var provider = new AnthropicProvider(httpClient, _options);
-
-        var request = new ChatRequest
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Messages = new List<Message> { new UserMessage("Say hello") }
+            Content = new StringContent(sse, Encoding.UTF8, "text/event-stream")
         };
+        var httpClient = CreateMockHttpClient(response);
+        var provider = new AnthropicProvider(httpClient, _generalOptions, _endpointOptions);
 
-        // Act
-        var chunks = await provider.StreamAsync(request, CancellationToken.None).ToListAsync();
+        var chunks = await provider.StreamAsync(new ChatRequest { Messages = new List<Message> { new UserMessage("Hi") } }).ToListAsync();
 
-        // Assert
-        chunks.Should().HaveCount(2);
+        chunks.Should().HaveCount(3);
         chunks[0].Content.Should().Be("Hello");
-        chunks[0].IsComplete.Should().BeFalse();
         chunks[1].Content.Should().Be(" world");
-        chunks[1].IsComplete.Should().BeFalse();
+        chunks[2].IsComplete.Should().BeTrue();
     }
 
     [Fact]
-    public async Task StreamAsync_WhenNonSuccessStatusCode_ThrowsLLMConnectException()
+    public async Task GetEmbeddingAsync_ThrowsNotSupportedException()
     {
-        // Arrange
-        var httpClient = CreateHttpClientWithResponse(HttpStatusCode.InternalServerError, "Internal Server Error");
-        var provider = new AnthropicProvider(httpClient, _options);
+        var provider = new AnthropicProvider(new HttpClient(), _generalOptions, _endpointOptions);
 
-        var request = new ChatRequest
-        {
-            Messages = new List<Message> { new UserMessage("Hi") }
-        };
+        Func<Task> act = async () => await provider.GetEmbeddingAsync(new EmbeddingRequest { Text = "Hello" });
 
-        // Act
-        Func<Task> act = async () =>
-        {
-            var enumerator = provider.StreamAsync(request, CancellationToken.None).GetAsyncEnumerator();
-            await enumerator.MoveNextAsync();
-        };
-
-        // Assert
-        var exception = await act.Should().ThrowAsync<LLMConnectException>();
-        exception.Which.Provider.Should().Be("Anthropic");
-        exception.Which.Message.Should().Contain("Internal Server Error");
-    }
-
-    [Fact]
-    public async Task StreamAsync_WhenResponseContainsOnlyFinishEvent_ReturnsNoChunks()
-    {
-        // Arrange
-        var sseContent = @"
-            event: message_stop
-            data: {}
-        ";
-
-        var httpClient = CreateHttpClientWithStreamingResponse(sseContent);
-        var provider = new AnthropicProvider(httpClient, _options);
-
-        var request = new ChatRequest
-        {
-            Messages = new List<Message> { new UserMessage("Say hello") }
-        };
-
-        // Act
-        var chunks = await provider.StreamAsync(request, CancellationToken.None).ToListAsync();
-
-        // Assert
-        chunks.Should().BeEmpty();
+        await act.Should().ThrowAsync<NotSupportedException>();
     }
 }

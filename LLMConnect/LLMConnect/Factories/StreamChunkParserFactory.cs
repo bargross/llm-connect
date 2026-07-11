@@ -6,19 +6,19 @@ namespace LLMConnect;
 
 internal static class StreamChunkParserFactory
 {
-    public static IStreamChunkParser Create(ProviderType provider, LLMConnectClientOptions options)
+    public static IStreamChunkParser Create(ProviderType? provider, LLMConnectGeneralOptions options)
     {
         var logger = options.LoggerFactory?.CreateLogger("StreamChunkParserFactory");
 
         switch (provider)
         {
-            case ProviderType.OpenAI: return new OpenAIStreamChunkParser(options);
+            case ProviderType.OpenAI or ProviderType.AzureOpenAI: return new OpenAIStreamChunkParser(options);
             case ProviderType.Anthropic: return new AnthropicStreamChunkParser(options);
             case ProviderType.Google: return new GoogleStreamChunkParser(options);
             case ProviderType.Ollama: return new OllamaStreamChunkParser(options);
             default:
                 {
-                    var message = $"Provider '{provider.ToString()}' is not supported.";
+                    var message = $"Provider '{provider?.ToString()}' is not supported.";
 
                     logger?.LogError(message);
 

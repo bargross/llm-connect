@@ -17,4 +17,10 @@ public class ChatChunk
     /// the provider's wire format makes it available.
     /// </summary>
     public string? FinishReason { get; set; }
+
+    /// <summary>
+    /// The list of tool calls made by the model, if any, populated only on the final chunk where
+    /// the provider's wire format makes it available.
+    /// </summary>
+    public List<ToolCallDelta>? ToolCalls { get; set; }
 }

@@ -1,11 +1,12 @@
-﻿using System.Text.Json.Serialization;
+﻿using LLMConnect.Models;
+using System.Text.Json.Serialization;
 
 namespace LLMConnect;
 
 internal class OpenAIChatRequest
 {
     [JsonPropertyName("model")]
-    public string Model { get; set; } = "gpt-3.5-turbo";
+    public string? Model { get; set; } = "gpt-3.5-turbo";
 
     [JsonPropertyName("messages")]
     public List<OpenAIMessage> Messages { get; set; } = new();
@@ -39,6 +40,12 @@ internal class OpenAIChatRequest
 
     [JsonPropertyName("user")]
     public string? User { get; set; }
+
+    [JsonPropertyName("tools")]
+    public List<OpenAITool>? Tools { get; set; }
+
+    [JsonPropertyName("tool_choice")]
+    public object? ToolChoice { get; set; }
 
     [JsonExtensionData]
     public Dictionary<string, object>? ExtraData { get; set; }

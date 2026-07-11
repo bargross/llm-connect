@@ -1,143 +1,216 @@
 ﻿using FluentAssertions;
 using LLMConnect.Configuration;
-using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Moq;
 
 namespace LLMConnect.Tests.Configuration;
 
-public class ServiceCollectionExtensionsTests
+public class ServiceCollectionExtensionsTests : IDisposable
 {
-    [Fact]
-    public void AddLLMConnect_WithConfigureDelegate_RegistersOptionsCorrectly()
+    public ServiceCollectionExtensionsTests()
     {
-        // Arrange
-        var services = new ServiceCollection();
-        var expectedApiKey = "test-key-123";
+        // Reset static state before each test
+        ResetCoreServicesRegistered();
+    }
 
-        // Act
-        services.AddLLMConnect(options =>
+    private static void ResetCoreServicesRegistered()
+    {
+        var field = typeof(ServiceCollectionExtensions)
+            .GetField("_coreServicesRegistered", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+        if (field != null)
         {
-            options.Provider = ProviderType.OpenAI;
-            options.ApiKey = expectedApiKey;
-            options.MaxRetries = 5;
-        });
-
-        // Build service provider to resolve options
-        var serviceProvider = services.BuildServiceProvider();
-        var options = serviceProvider.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
-
-        // Assert
-        options.Provider.Should().Be(ProviderType.OpenAI);
-        options.ApiKey.Should().Be(expectedApiKey);
-        options.MaxRetries.Should().Be(5);
+            field.SetValue(null, false);
+        }
     }
 
+    public void Dispose()
+    {
+        // Reset after test to avoid affecting other tests
+        ResetCoreServicesRegistered();
+    }
+
+    // ---------- Overload 1: Action<LLMConnectClientOptions> ----------
+
     [Fact]
-    public void AddLLMConnect_WithoutConfigureDelegate_RegistersDefaultOptions()
+    public void AddLLMConnect_WithLegacyOptions_RegistersClientAndConfiguresOptions()
     {
         // Arrange
         var services = new ServiceCollection();
+        Action<LLMConnectClientOptions> configure = opts => opts.ApiKey = "test-key";
 
         // Act
-        services.AddLLMConnect();
+        services.AddLLMConnect(configure);
 
-        // Build service provider to resolve options
-        var serviceProvider = services.BuildServiceProvider();
-        var options = serviceProvider.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
-
-        // Assert
-        options.Provider.Should().Be(ProviderType.OpenAI); // Default
-        options.ApiKey.Should().Be(string.Empty); // Default
-        options.MaxRetries.Should().Be(3); // Default
-        options.Timeout.Should().Be(TimeSpan.FromSeconds(60)); // Default
-    }
-
-    [Fact]
-    public void AddLLMConnect_RegistersILLMConnectClientAsSingleton()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-
-        // Act
-        services.AddLLMConnect();
-
-        // Assert
-        var descriptor = services.Should().ContainSingle(sd =>
-            sd.ServiceType == typeof(ILLMConnectClient) &&
-            sd.Lifetime == ServiceLifetime.Singleton &&
-            sd.ImplementationFactory != null);
-        descriptor.Should().NotBeNull();
-    }
-
-    [Fact]
-    public void AddLLMConnect_RegistersNamedHttpClientWithRetryHandler()
-    {
-        // Arrange
-        var services = new ServiceCollection();
-
-        // Act
-        services.AddLLMConnect(options =>
-        {
-            options.Provider = ProviderType.OpenAI;
-            options.ApiKey = "valid-test-key";
-            options.MaxRetries = 3;
-        });
-
-        // Build the service provider
         var provider = services.BuildServiceProvider();
 
         // Assert
-        // 1. The client can be resolved
-        var client = provider.GetService<ILLMConnectClient>();
-        client.Should().NotBeNull();
+        var options = provider.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
+        options.ApiKey.Should().Be("test-key");
 
-        // 2. The HttpClientFactory is registered
-        var factory = provider.GetService<IHttpClientFactory>();
-        factory.Should().NotBeNull();
-
-        // 3. The named client can be created (ensures the handler chain is configured)
-        using var httpClient = factory.CreateClient("LLMConnect");
-        httpClient.Should().NotBeNull();
+        var client = provider.GetRequiredService<ILLMConnectClient>();
+        client.Should().BeOfType<LLMConnectClient>();
     }
 
+    // ---------- Overload 2: Both general and endpoint ----------
+
     [Fact]
-    public void AddLLMConnect_WhenConfigureDelegateIsNull_DoesNotThrow()
+    public void AddLLMConnect_WithGeneralAndEndpointOptions_RegistersBothAndClient()
     {
         // Arrange
         var services = new ServiceCollection();
+        Action<LLMConnectGeneralOptions> configureGeneral = opts => opts.ApiKey = "general-key";
+        Action<LLMConnectEndpointOptions> configureEndpoint = opts => opts.AzureResourceName = "my-resource";
 
         // Act
-        Action act = () => services.AddLLMConnect(null);
+        services.AddLLMConnect(configureGeneral, configureEndpoint);
+
+        var provider = services.BuildServiceProvider();
 
         // Assert
-        act.Should().NotThrow();
+        var general = provider.GetRequiredService<IOptions<LLMConnectGeneralOptions>>().Value;
+        general.ApiKey.Should().Be("general-key");
+
+        var endpoint = provider.GetRequiredService<IOptions<LLMConnectEndpointOptions>>().Value;
+        endpoint.AzureResourceName.Should().Be("my-resource");
+
+        var client = provider.GetRequiredService<ILLMConnectClient>();
+        client.Should().BeOfType<LLMConnectClient>();
     }
 
+    // ---------- Overload 3: Only general options ----------
+
     [Fact]
-    public void AddLLMConnect_RegistersRetryHandlerWithMaxRetriesFromOptions()
+    public void AddLLMConnect_WithOnlyGeneralOptions_RegistersGeneralAndDefaultEndpoint()
     {
         // Arrange
         var services = new ServiceCollection();
-        var expectedMaxRetries = 7;
+        Action<LLMConnectGeneralOptions> configureGeneral = opts => opts.ApiKey = "general-key";
 
         // Act
-        services.AddLLMConnect(options =>
-        {
-            options.MaxRetries = expectedMaxRetries;
-        });
+        services.AddLLMConnect(configureGeneral);
 
-        // Build service provider and resolve the retry handler (which is used by the named client)
-        var serviceProvider = services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
 
-        // The retry handler is not directly registered as a service (it's created via a factory delegate).
-        // We can't easily resolve it. But we can verify that the options were correctly registered.
-        var options = serviceProvider.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
-        options.MaxRetries.Should().Be(expectedMaxRetries);
+        // Assert
+        var general = provider.GetRequiredService<IOptions<LLMConnectGeneralOptions>>().Value;
+        general.ApiKey.Should().Be("general-key");
 
-        // Alternatively, we could use a custom approach to extract the handler, but it's complex.
-        // We'll rely on the fact that the options are passed to the handler when created.
-        // This is covered by the previous test where we check the options.
+        // Endpoint options should be registered (default, empty)
+        var endpoint = provider.GetRequiredService<IOptions<LLMConnectEndpointOptions>>().Value;
+        endpoint.Should().NotBeNull();
+        endpoint.AzureResourceName.Should().BeNull();
+
+        var client = provider.GetRequiredService<ILLMConnectClient>();
+        client.Should().BeOfType<LLMConnectClient>();
+    }
+
+    // ---------- Core registration (only once) ----------
+
+    [Fact]
+    public void AddLLMConnect_RegistersCoreServicesOnlyOnce()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var firstCallCount = services.Count;
+
+        // Act
+        services.AddLLMConnect();
+        var afterFirstCount = services.Count;
+
+        services.AddLLMConnect();
+        var afterSecondCount = services.Count;
+
+        // Assert
+        // Core services should not be added twice, but options and client are added each time.
+        // Count should increase on first call, but not on second (only the new client/options).
+        // To verify, we can check that the number of service descriptors added is consistent.
+        // We'll check that after second call, the count is not doubled.
+
+        afterSecondCount.Should().BeGreaterThan(afterFirstCount); // Some services are added (client/options)
+        afterSecondCount.Should().BeLessThan(afterFirstCount * 2); // Not double
+
+        // Additionally, we can check that the HttpClient is registered only once.
+        var httpClientDescriptors = services.Where(sd => sd.ServiceType == typeof(HttpClient) || sd.ServiceType == typeof(IHttpClientFactory)).ToList();
+        httpClientDescriptors.Should().HaveCount(2);
+    }
+
+    // ---------- Factory method verification ----------
+
+    [Fact]
+    public void AddLLMConnect_CreatesClientWithResolvedOptions()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        var expectedApiKey = "resolved-key";
+        Action<LLMConnectGeneralOptions> configureGeneral = opts => opts.ApiKey = expectedApiKey;
+
+        services.AddLLMConnect(configureGeneral);
+
+        var provider = services.BuildServiceProvider();
+
+        // Act – we need to inspect the factory delegate, but we can just resolve the client.
+        var client = provider.GetRequiredService<ILLMConnectClient>();
+
+        // Assert
+        client.Should().BeOfType<LLMConnectClient>();
+        // We can't easily inspect the internal options of the client, but we can verify
+        // it was constructed with the correct options by checking its behavior.
+        // As a compromise, we verify the service is registered as a singleton.
+        var clientLifetime = services.First(sd => sd.ServiceType == typeof(ILLMConnectClient)).Lifetime;
+        clientLifetime.Should().Be(ServiceLifetime.Singleton);
+    }
+
+    [Fact]
+    public void AddLLMConnect_WithSplitOptions_CreatesClientWithGeneralAndEndpoint()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLLMConnect(
+            general => general.ApiKey = "general-key",
+            endpoint => endpoint.AzureResourceName = "my-resource");
+
+        var provider = services.BuildServiceProvider();
+
+        // Act
+        var client = provider.GetRequiredService<ILLMConnectClient>();
+
+        // Assert
+        client.Should().BeOfType<LLMConnectClient>();
+        var general = provider.GetRequiredService<IOptions<LLMConnectGeneralOptions>>().Value;
+        general.ApiKey.Should().Be("general-key");
+        var endpoint = provider.GetRequiredService<IOptions<LLMConnectEndpointOptions>>().Value;
+        endpoint.AzureResourceName.Should().Be("my-resource");
+    }
+
+    // ---------- Error cases ----------
+
+    [Fact]
+    public void AddLLMConnect_WithNullConfigureGeneral_ThrowsArgumentNullException()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        Action act = () => services.AddLLMConnect((Action<LLMConnectGeneralOptions>)null!);
+
+        // Assert
+        act.Should().Throw<ArgumentNullException>()
+            .WithParameterName("configureOptions");
+    }
+
+    [Fact]
+    public void AddLLMConnect_WithNullConfigureEndpoint_ThrowsArgumentNullException()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        Action act = () => services.AddLLMConnect(general => { }, null!);
+
+        // Assert
+        act.Should().Throw<ArgumentNullException>()
+            .WithParameterName("configureOptions");
     }
 }

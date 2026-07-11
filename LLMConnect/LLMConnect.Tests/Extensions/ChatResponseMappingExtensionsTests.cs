@@ -419,8 +419,8 @@ public class ChatResponseMappingExtensionsTests
             Message = new OllamaMessage { Role = "assistant", Content = "Hello, world!" },
             Done = true,
             DoneReason = "stop",
-            EvalCount = 10,
-            PromptEvalCount = 5
+            EvalCount = 5,
+            PromptEvalCount = 10
         };
 
         // Act
@@ -503,5 +503,51 @@ public class ChatResponseMappingExtensionsTests
         // Assert
         result.Should().NotBeNull();
         result.FinishReason.Should().BeNull();
+    }
+
+    [Fact]
+    public void ToChatResponse_WithToolCalls_ReturnsToolCalls()
+    {
+        // Arrange
+        var openAiResponse = new OpenAIChatResponse
+        {
+            Choices = new List<OpenAIChoice>
+            {
+                new OpenAIChoice
+                {
+                    Message = new OpenAIResponseMessage
+                    {
+                        Content = null,
+                        ToolCalls = new List<OpenAIToolCall>
+                        {
+                            new OpenAIToolCall
+                            {
+                                Id = "call_123",
+                                Type = "function",
+                                Function = new OpenAIFunctionCall
+                                {
+                                    Name = "get_weather",
+                                    Arguments = "{\"location\":\"Boston\"}"
+                                }
+                            }
+                        }
+                    },
+                    FinishReason = "tool_calls"
+                }
+            }
+        };
+
+        // Act
+        var result = openAiResponse.ToChatResponse();
+
+        // Assert
+        result.Should().NotBeNull();
+        result.ToolCalls.Should().HaveCount(1);
+        var toolCall = result.ToolCalls[0];
+        toolCall.Name.Should().Be("get_weather");
+        toolCall.Arguments.Should().ContainKey("location");
+        // Use BeEquivalentTo to compare values regardless of type (JsonElement vs string)
+        toolCall.Arguments["location"].ToString().Should().BeEquivalentTo("Boston");
+        result.FinishReason.Should().Be("tool_calls");
     }
 }

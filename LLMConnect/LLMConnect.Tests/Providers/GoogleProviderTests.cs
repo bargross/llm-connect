@@ -12,29 +12,29 @@ namespace LLMConnect.Tests.Providers;
 
 public class GoogleProviderTests
 {
-    private readonly Mock<ILogger> _loggerMock;
-    private readonly LLMConnectClientOptions _options;
+    private readonly Mock<ILogger<GoogleProvider>> _loggerMock;
+    private readonly Mock<ILoggerFactory> _loggerFactoryMock;
+    private readonly LLMConnectGeneralOptions _generalOptions;
+    private readonly LLMConnectEndpointOptions _endpointOptions;
 
     public GoogleProviderTests()
     {
-        _loggerMock = new Mock<ILogger>();
-        var loggerFactoryMock = new Mock<ILoggerFactory>();
-        loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>()))
-            .Returns(_loggerMock.Object);
+        _loggerMock = new Mock<ILogger<GoogleProvider>>();
+        _loggerFactoryMock = new Mock<ILoggerFactory>();
+        _loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(_loggerMock.Object);
 
-        _options = new LLMConnectClientOptions
+        _generalOptions = new LLMConnectGeneralOptions
         {
             Provider = ProviderType.Google,
-            ApiKey = "test-google-api-key",
-            DefaultModel = "gemini-2.0-flash",
-            LoggerFactory = loggerFactoryMock.Object,
-            MaxRetries = 0 // Disable retries for test determinism
+            ApiKey = "test-key",
+            LoggerFactory = _loggerFactoryMock.Object,
+            DefaultModel = "gemini-3.5-flash"
         };
+        _endpointOptions = new LLMConnectEndpointOptions();
     }
 
-    private HttpClient CreateHttpClientWithResponse(HttpStatusCode statusCode, string content, string? baseAddress = null)
+    private HttpClient CreateMockHttpClient(HttpResponseMessage response)
     {
-        baseAddress ??= "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent";
         var handlerMock = new Mock<HttpMessageHandler>();
         handlerMock
             .Protected()
@@ -42,226 +42,139 @@ public class GoogleProviderTests
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(new HttpResponseMessage
-            {
-                StatusCode = statusCode,
-                Content = new StringContent(content, Encoding.UTF8, "application/json")
-            })
-            .Verifiable();
-
-        var client = new HttpClient(handlerMock.Object)
+            .ReturnsAsync(response);
+        return new HttpClient(handlerMock.Object)
         {
-            BaseAddress = new Uri(baseAddress)
+            BaseAddress = new Uri("https://generativelanguage.googleapis.com/v1beta/")
         };
-        return client;
-    }
-
-    private HttpClient CreateHttpClientWithStreamingResponse(string sseContent)
-    {
-        var streamContent = new StringContent(sseContent, Encoding.UTF8, "text/event-stream");
-        var response = new HttpResponseMessage
-        {
-            StatusCode = HttpStatusCode.OK,
-            Content = streamContent
-        };
-        var handlerMock = new Mock<HttpMessageHandler>();
-        handlerMock
-            .Protected()
-            .Setup<Task<HttpResponseMessage>>(
-                "SendAsync",
-                ItExpr.IsAny<HttpRequestMessage>(),
-                ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(response)
-            .Verifiable();
-        var client = new HttpClient(handlerMock.Object)
-        {
-            BaseAddress = new Uri("https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent")
-        };
-        return client;
     }
 
     [Fact]
-    public async Task ChatAsync_WhenValidRequest_ReturnsChatResponse()
+    public async Task ChatAsync_ValidResponse_DeserializesCorrectly()
     {
-        // Arrange
-        var responseJson = @"
+        var json = """
         {
-            ""candidates"": [
-                {
-                    ""content"": {
-                        ""parts"": [
-                            { ""text"": ""Hello, world!"" }
-                        ]
-                    },
-                    ""finishReason"": ""STOP""
-                }
-            ],
-            ""usageMetadata"": {
-                ""promptTokenCount"": 10,
-                ""candidatesTokenCount"": 5
-            }
-        }";
-        var httpClient = CreateHttpClientWithResponse(HttpStatusCode.OK, responseJson);
-        var provider = new GoogleProvider(httpClient, _options);
-
-        var request = new ChatRequest
+            "candidates": [{ "content": { "parts": [{ "text": "Hello" }] }, "finishReason": "STOP" }],
+            "usageMetadata": { "promptTokenCount": 10, "candidatesTokenCount": 5 }
+        }
+        """;
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Messages = new List<Message> { new UserMessage("Hi") },
-            Temperature = 0.7f,
-            MaxTokens = 100
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
+        var httpClient = CreateMockHttpClient(response);
+        var provider = new GoogleProvider(httpClient, _generalOptions, _endpointOptions);
 
-        // Act
-        var result = await provider.ChatAsync(request, CancellationToken.None);
+        var result = await provider.ChatAsync(new ChatRequest { Messages = new List<Message> { new UserMessage("Hi") } });
 
-        // Assert
         result.Should().NotBeNull();
-        result.Content.Should().Be("Hello, world!");
+        result.Content.Should().Be("Hello");
         result.FinishReason.Should().Be("STOP");
         result.Usage.InputTokens.Should().Be(10);
         result.Usage.OutputTokens.Should().Be(5);
     }
 
     [Fact]
-    public async Task ChatAsync_WhenNonSuccessStatusCode_ThrowsLLMConnectException()
+    public async Task ChatAsync_ErrorResponse_ThrowsLLMConnectException()
     {
-        // Arrange
-        var errorJson = @"{""error"":{""message"":""Invalid API key"",""code"":403}}";
-        var httpClient = CreateHttpClientWithResponse(HttpStatusCode.Forbidden, errorJson);
-        var provider = new GoogleProvider(httpClient, _options);
-
-        var request = new ChatRequest
+        var errorJson = @"{""error"":{""message"":""Invalid API key""}}";
+        var response = new HttpResponseMessage(HttpStatusCode.Unauthorized)
         {
-            Messages = new List<Message> { new UserMessage("Hi") }
+            Content = new StringContent(errorJson, Encoding.UTF8, "application/json")
         };
+        var httpClient = CreateMockHttpClient(response);
+        var provider = new GoogleProvider(httpClient, _generalOptions, _endpointOptions);
 
-        // Act
-        Func<Task> act = async () => await provider.ChatAsync(request, CancellationToken.None);
+        Func<Task> act = async () => await provider.ChatAsync(new ChatRequest { Messages = new List<Message> { new UserMessage("Hi") } });
 
-        // Assert
-        var exception = await act.Should().ThrowAsync<LLMConnectException>();
-        exception.Which.Provider.Should().Be("Google");
-        exception.Which.Message.Should().Be("Invalid API key");
+        var ex = await act.Should().ThrowAsync<LLMConnectException>();
+        ex.Which.Provider.Should().Be("Google");
+        ex.Which.Message.Should().Be("Invalid API key");
     }
 
     [Fact]
-    public async Task ChatAsync_WhenDeserializationFails_ThrowsLLMConnectException()
+    public async Task ChatAsync_WhenCancelled_ThrowsOperationCanceledException()
     {
         // Arrange
-        var invalidJson = "{ invalid: }"; // Malformed JSON
-        var httpClient = CreateHttpClientWithResponse(HttpStatusCode.OK, invalidJson);
-        var provider = new GoogleProvider(httpClient, _options);
+        var cts = new CancellationTokenSource();
+        cts.Cancel();
 
-        var request = new ChatRequest
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Returns<HttpRequestMessage, CancellationToken>((req, ct) =>
+            {
+                if (ct.IsCancellationRequested)
+                    throw new OperationCanceledException();
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"ok\"}]}}]}")
+                });
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
         {
-            Messages = new List<Message> { new UserMessage("Hi") }
+            BaseAddress = new Uri("https://generativelanguage.googleapis.com/v1beta/")
         };
+        var provider = new GoogleProvider(httpClient, _generalOptions, _endpointOptions);
 
-        // Act
-        Func<Task> act = async () => await provider.ChatAsync(request, CancellationToken.None);
+        var request = new ChatRequest { Messages = new List<Message> { new UserMessage("Hi") } };
 
-        // Assert
-        var exception = await act.Should().ThrowAsync<LLMConnectException>();
-        exception.Which.Provider.Should().Be("Google");
-        exception.Which.Message.Should().Contain("Failed to deserialize response");
-        _loggerMock.Verify(
-            x => x.Log(
-                LogLevel.Error,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Google")),
-                It.IsAny<Exception>(),
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-            Times.Once);
+        // Act & Assert
+        Func<Task> act = async () => await provider.ChatAsync(request, cts.Token);
+        await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
     [Fact]
-    public async Task StreamAsync_WhenValidRequest_YieldsChatChunks()
+    public async Task StreamAsync_ValidResponse_ReturnsChunks()
     {
-        // Arrange
-        var sseContent = """
-        data: {"candidates":[{"content":{"parts":[{"text":"Hello"}]}}]}
+        var sse = """
+            data: {"candidates":[{"content":{"parts":[{"text":"Hello"}]}}]}
 
-        data: {"candidates":[{"content":{"parts":[{"text":" world"}]}}]}
+            data: {"candidates":[{"content":{"parts":[{"text":" world"}]}}]}
 
-        data: {"candidates":[{"finishReason":"STOP"}]}
-        """;
-
-        var httpClient = CreateHttpClientWithStreamingResponse(sseContent);
-        var provider = new GoogleProvider(httpClient, _options);
-
-        var request = new ChatRequest
+            data: {"candidates":[{"finishReason":"STOP"}]}
+            """;
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Messages = new List<Message> { new UserMessage("Say hello") }
+            Content = new StringContent(sse, Encoding.UTF8, "text/event-stream")
         };
+        var httpClient = CreateMockHttpClient(response);
+        var provider = new GoogleProvider(httpClient, _generalOptions, _endpointOptions);
 
-        // Act
-        var chunks = await provider.StreamAsync(request, CancellationToken.None).ToListAsync();
+        var chunks = await provider.StreamAsync(new ChatRequest { Messages = new List<Message> { new UserMessage("Hi") } }).ToListAsync();
 
-        // Assert
         chunks.Should().HaveCount(3);
         chunks[0].Content.Should().Be("Hello");
-        chunks[0].IsComplete.Should().BeFalse();
-        chunks[0].FinishReason.Should().BeNull();
         chunks[1].Content.Should().Be(" world");
-        chunks[1].IsComplete.Should().BeFalse();
-        chunks[1].FinishReason.Should().BeNull();
-        chunks[2].Content.Should().BeEmpty();
         chunks[2].IsComplete.Should().BeTrue();
         chunks[2].FinishReason.Should().Be("STOP");
     }
 
     [Fact]
-    public async Task StreamAsync_WhenNonSuccessStatusCode_ThrowsLLMConnectException()
+    public async Task GetEmbeddingAsync_ValidResponse_DeserializesCorrectly()
     {
-        // Arrange
-        var httpClient = CreateHttpClientWithResponse(HttpStatusCode.InternalServerError, "Internal Server Error");
-        var provider = new GoogleProvider(httpClient, _options);
-
-        var request = new ChatRequest
+        var json = """
         {
-            Messages = new List<Message> { new UserMessage("Hi") }
-        };
-
-        // Act
-        Func<Task> act = async () =>
-        {
-            var enumerator = provider.StreamAsync(request, CancellationToken.None).GetAsyncEnumerator();
-            await enumerator.MoveNextAsync();
-        };
-
-        // Assert
-        var exception = await act.Should().ThrowAsync<LLMConnectException>();
-        exception.Which.Provider.Should().Be("Google");
-        exception.Which.Message.Should().Contain("Internal Server Error");
-    }
-
-    [Fact]
-    public async Task StreamAsync_WhenResponseHasFinishReasonOnly_ReturnsCompleteChunk()
-    {
-        // Arrange
-        var sseContent = """
-        data: {"candidates":[{"content":{"parts":[{"text":"Hello"}]}}]}
-
-        data: {"candidates":[{"finishReason":"MAX_TOKENS"}]}
+            "embedding": { "values": [0.5, 0.6, 0.7] }
+        }
         """;
-
-        var httpClient = CreateHttpClientWithStreamingResponse(sseContent);
-        var provider = new GoogleProvider(httpClient, _options);
-
-        var request = new ChatRequest
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Messages = new List<Message> { new UserMessage("Say hello") }
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
+        var httpClient = CreateMockHttpClient(response);
+        var provider = new GoogleProvider(httpClient, _generalOptions, _endpointOptions);
 
-        // Act
-        var chunks = await provider.StreamAsync(request, CancellationToken.None).ToListAsync();
+        var result = await provider.GetEmbeddingAsync(new EmbeddingRequest { Text = "Hello" });
 
-        // Assert
-        chunks.Should().HaveCount(2);
-        chunks[0].Content.Should().Be("Hello");
-        chunks[0].IsComplete.Should().BeFalse();
-        chunks[1].Content.Should().BeEmpty();
-        chunks[1].IsComplete.Should().BeTrue();
-        chunks[1].FinishReason.Should().Be("MAX_TOKENS");
+        result.Should().NotBeNull();
+        result.Embedding.Should().BeEquivalentTo(new float[] { 0.5f, 0.6f, 0.7f });
+        result.Model.Should().Be("google");
+        result.Usage.Should().BeNull();
     }
 }

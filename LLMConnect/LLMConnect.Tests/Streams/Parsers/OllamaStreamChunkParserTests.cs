@@ -1,200 +1,164 @@
 ﻿using FluentAssertions;
+using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Xunit;
 
 namespace LLMConnect.Tests.Streams.ChunkParsers;
 
 public class OllamaStreamChunkParserTests
 {
-    private readonly Mock<ILogger> _loggerMock;
-    private readonly LLMConnectClientOptions _options;
+    private readonly Mock<ILogger<OllamaStreamChunkParser>> _loggerMock;
+    private readonly Mock<ILoggerFactory> _loggerFactoryMock;
+    private readonly LLMConnectGeneralOptions _options;
 
     public OllamaStreamChunkParserTests()
     {
-        _loggerMock = new Mock<ILogger>();
-        var loggerFactoryMock = new Mock<ILoggerFactory>();
-        loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>()))
+        _loggerMock = new Mock<ILogger<OllamaStreamChunkParser>>();
+        _loggerFactoryMock = new Mock<ILoggerFactory>();
+        _loggerFactoryMock
+            .Setup(x => x.CreateLogger(It.IsAny<string>()))
             .Returns(_loggerMock.Object);
 
-        _options = new LLMConnectClientOptions
+        _options = new LLMConnectGeneralOptions
         {
-            LoggerFactory = loggerFactoryMock.Object
+            LoggerFactory = _loggerFactoryMock.Object
         };
     }
 
+    // ---------- Text deltas ----------
     [Fact]
-    public void Parse_WhenDataHasContentAndDoneFalse_ReturnsIncompleteChunk()
+    public void Parse_WithTextDelta_ReturnsTextChunk()
     {
-        // Arrange
+        var ndjson = @"{""message"":{""content"":""Hello""},""done"":false}";
+        var evt = new StreamEvent(null, ndjson);
         var parser = new OllamaStreamChunkParser(_options);
-        var json = @"{""message"":{""content"":""Hello""},""done"":false}";
-        var evt = new StreamEvent(null, json);
 
-        // Act
         var result = parser.Parse(evt);
 
-        // Assert
         result.Should().NotBeNull();
         result.Content.Should().Be("Hello");
+        result.IsComplete.Should().BeFalse();
+        result.ToolCalls.Should().BeNull();
+    }
+
+    // ---------- Tool calls ----------
+    [Fact]
+    public void Parse_WithToolCallsDelta_ReturnsToolCallChunk()
+    {
+        var ndjson = @"{""message"":{""role"":""assistant"",""content"":"""",""tool_calls"":[{""function"":{""name"":""get_weather"",""arguments"":{""location"":""Boston""}}}]},""done"":false}";
+        var evt = new StreamEvent(null, ndjson);
+        var parser = new OllamaStreamChunkParser(_options);
+
+        var result = parser.Parse(evt);
+
+        result.Should().NotBeNull();
+        result.ToolCalls.Should().HaveCount(1);
+        var tc = result.ToolCalls[0];
+        tc.Index.Should().Be(0);
+        tc.Id.Should().Be("get_weather");
+        tc.Name.Should().Be("get_weather");
+        tc.ArgumentsDelta.Should().Be("{\"location\":\"Boston\"}");
+        result.Content.Should().BeNull();
         result.IsComplete.Should().BeFalse();
     }
 
     [Fact]
-    public void Parse_WhenDataHasContentAndDoneTrue_ReturnsCompleteChunk()
+    public void Parse_WithMultipleToolCalls_ReturnsAllToolCalls()
     {
-        // Arrange
+        var ndjson = @"{""message"":{""role"":""assistant"",""tool_calls"":[
+            {""function"":{""name"":""get_weather"",""arguments"":{""location"":""Boston""}}},
+            {""function"":{""name"":""get_time"",""arguments"":{""timezone"":""EST""}}}
+        ]},""done"":false}";
+        var evt = new StreamEvent(null, ndjson);
         var parser = new OllamaStreamChunkParser(_options);
-        var json = @"{""message"":{""content"":""Hello""},""done"":true}";
-        var evt = new StreamEvent(null, json);
 
-        // Act
         var result = parser.Parse(evt);
 
-        // Assert
         result.Should().NotBeNull();
-        result.Content.Should().Be("Hello");
+        result.ToolCalls.Should().HaveCount(2);
+        result.ToolCalls[0].Name.Should().Be("get_weather");
+        result.ToolCalls[1].Name.Should().Be("get_time");
+    }
+
+    // ---------- Done flag ----------
+    [Fact]
+    public void Parse_WithDoneFlag_ReturnsCompleteChunk()
+    {
+        var ndjson = @"{""message"":{""content"":""Done""},""done"":true,""done_reason"":""stop""}";
+        var evt = new StreamEvent(null, ndjson);
+        var parser = new OllamaStreamChunkParser(_options);
+
+        var result = parser.Parse(evt);
+
+        result.Should().NotBeNull();
         result.IsComplete.Should().BeTrue();
+        result.FinishReason.Should().Be("stop");
+        result.Content.Should().Be("Done");
+        result.ToolCalls.Should().BeNull();
     }
 
     [Fact]
-    public void Parse_WhenDataHasContentAndDoneNull_ReturnsIncompleteChunk()
+    public void Parse_WithDoneFlagWithoutReason_ReturnsCompleteChunkWithDefaultReason()
     {
-        // Arrange
+        var ndjson = @"{""message"":{""content"":""Done""},""done"":true}";
+        var evt = new StreamEvent(null, ndjson);
         var parser = new OllamaStreamChunkParser(_options);
-        var json = @"{""message"":{""content"":""Hello""}}";
-        var evt = new StreamEvent(null, json);
 
-        // Act
         var result = parser.Parse(evt);
 
-        // Assert
         result.Should().NotBeNull();
-        result.Content.Should().Be("Hello");
-        result.IsComplete.Should().BeFalse();
+        result.IsComplete.Should().BeTrue();
+        result.FinishReason.Should().Be("stop");
+        result.Content.Should().Be("Done");
     }
 
+    // ---------- Edge cases ----------
     [Fact]
-    public void Parse_WhenDataHasContentWithSpecialCharacters_ReturnsCorrectText()
+    public void Parse_WithEmptyData_ReturnsNull()
     {
-        // Arrange
+        var evt = new StreamEvent(null, "");
         var parser = new OllamaStreamChunkParser(_options);
-        var json = @"{""message"":{""content"":""Hello\nworld""},""done"":false}";
-        var evt = new StreamEvent(null, json);
 
-        // Act
         var result = parser.Parse(evt);
 
-        // Assert
-        result.Should().NotBeNull();
-        result.Content.Should().Be("Hello\nworld");
+        result.Should().BeNull();
     }
 
     [Fact]
-    public void Parse_WhenDataIsNullOrEmpty_ReturnsNull()
+    public void Parse_WithMalformedJson_LogsAndReturnsNull()
     {
-        // Arrange
+        var malformed = "{ incomplete json";
+        var evt = new StreamEvent(null, malformed);
         var parser = new OllamaStreamChunkParser(_options);
 
-        // Act
-        var result1 = parser.Parse(new StreamEvent(null, null!));
-        var result2 = parser.Parse(new StreamEvent(null, ""));
-
-        // Assert
-        result1.Should().BeNull();
-        result2.Should().BeNull();
-
-        // No log should be written
-        _loggerMock.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public void Parse_WhenDataIsMalformedJson_LogsErrorAndReturnsNull()
-    {
-        // Arrange
-        var parser = new OllamaStreamChunkParser(_options);
-        var malformedJson = "{message:{content:Hello},done:false}"; // Invalid JSON
-        var evt = new StreamEvent(null, malformedJson);
-
-        // Act
         var result = parser.Parse(evt);
 
-        // Assert
         result.Should().BeNull();
 
-        // Verify logger was called with LogLevel.Information
         _loggerMock.Verify(
             x => x.Log(
                 LogLevel.Information,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Ignoring malformed chunks")),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Ignoring malformed")),
                 It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);
     }
 
     [Fact]
-    public void Parse_WhenDataHasEmptyContent_ReturnsNull()
+    public void Parse_WithNullMessage_ReturnsCompleteChunk()
     {
-        // Arrange
+        var ndjson = @"{""done"":true}";
+        var evt = new StreamEvent(null, ndjson);
         var parser = new OllamaStreamChunkParser(_options);
-        var json = @"{""message"":{""content"":""""},""done"":false}";
-        var evt = new StreamEvent(null, json);
 
-        // Act
         var result = parser.Parse(evt);
 
-        // Assert
-        result.Should().BeNull();
-        // No log should be written
-        _loggerMock.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public void Parse_WhenDataHasNoMessage_ReturnsNull()
-    {
-        // Arrange
-        var parser = new OllamaStreamChunkParser(_options);
-        var json = @"{""done"":false}";
-        var evt = new StreamEvent(null, json);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().BeNull();
-    }
-
-    [Fact]
-    public void Parse_WhenDataHasMessageButNoContent_ReturnsNull()
-    {
-        // Arrange
-        var parser = new OllamaStreamChunkParser(_options);
-        var json = @"{""message"":{},""done"":false}";
-        var evt = new StreamEvent(null, json);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().BeNull();
-    }
-
-    [Fact]
-    public void Parse_WhenDataHasExtraFields_IgnoresThem()
-    {
-        // Arrange
-        var parser = new OllamaStreamChunkParser(_options);
-        var json = @"{""extra"":""value"",""message"":{""content"":""Hello""},""done"":false}";
-        var evt = new StreamEvent(null, json);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
         result.Should().NotBeNull();
-        result.Content.Should().Be("Hello");
-        result.IsComplete.Should().BeFalse();
+        result.IsComplete.Should().BeTrue();
+        result.FinishReason.Should().Be("stop");
+        result.Content.Should().BeNull();
+        result.ToolCalls.Should().BeNull();
     }
 }

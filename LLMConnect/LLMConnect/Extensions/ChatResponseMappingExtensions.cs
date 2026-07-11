@@ -1,4 +1,5 @@
 ﻿using LLMConnect.Models;
+using System.Text.Json;
 
 namespace LLMConnect;
 
@@ -8,19 +9,13 @@ internal static class ChatResponseMappingExtensions
     {
         if (response == null) return null;
 
-        if (response?.Choices?.FirstOrDefault()?.Message is not OpenAIResponseMessage message)
-        {
-            return new ChatResponse
-            {
-                Content = string.Empty,
-                Usage = new Usage()
-            };
-        }
+        var firstChoice = response.Choices?.FirstOrDefault();
+        var message = firstChoice?.Message;
 
-        return new ChatResponse
+        var chatResponse = new ChatResponse
         {
-            Content = message.Content ?? string.Empty,
-            FinishReason = response.Choices.FirstOrDefault()?.FinishReason,
+            Content = message?.Content ?? string.Empty,
+            FinishReason = firstChoice?.FinishReason,
             Usage = new Usage
             {
                 InputTokens = response.Usage?.PromptTokens ?? 0,
@@ -31,16 +26,30 @@ internal static class ChatResponseMappingExtensions
                 ? DateTimeOffset.FromUnixTimeSeconds(response.Created.Value).UtcDateTime
                 : DateTime.UtcNow
         };
+
+        if (message?.ToolCalls != null && message.ToolCalls.Count > 0)
+        {
+            chatResponse.ToolCalls = message.ToolCalls.Select(tc => new ToolCall
+            {
+                Id = tc.Id,
+                Name = tc.Function.Name,
+                Arguments = JsonSerializer.Deserialize<Dictionary<string, object>>(tc.Function.Arguments ?? "{}") ?? new()
+            }).ToList();
+        }
+
+        return chatResponse;
     }
 
     internal static ChatResponse? ToChatResponse(this AnthropicChatResponse response)
     {
         if (response == null) return null;
 
-        var text = response.Content?.FirstOrDefault(c => c.Type == "text")?.Text ?? string.Empty;
-        return new ChatResponse
+        var textBlock = response.Content?.FirstOrDefault(c => c.Type == "text");
+        var toolUseBlocks = response.Content?.Where(c => c.Type == "tool_use").ToList();
+
+        var chatResponse = new ChatResponse
         {
-            Content = text,
+            Content = textBlock?.Text ?? string.Empty,
             FinishReason = response.StopReason,
             Usage = new Usage
             {
@@ -50,6 +59,18 @@ internal static class ChatResponseMappingExtensions
             Model = response.Model,
             CreatedAt = DateTime.UtcNow
         };
+
+        if (toolUseBlocks != null && toolUseBlocks.Count > 0)
+        {
+            chatResponse.ToolCalls = toolUseBlocks.Select(c => new ToolCall
+            {
+                Id = c.Id ?? string.Empty,
+                Name = c.Name ?? string.Empty,
+                Arguments = c.Input ?? new()
+            }).ToList();
+        }
+
+        return chatResponse;
     }
 
     internal static ChatResponse? ToChatResponse(this GoogleChatResponse response)
@@ -57,10 +78,15 @@ internal static class ChatResponseMappingExtensions
         if (response == null) return null;
 
         var candidate = response.Candidates?.FirstOrDefault();
-        var content = candidate?.Content?.Parts?.FirstOrDefault()?.Text ?? string.Empty;
-        return new ChatResponse
+        var content = candidate?.Content;
+        var parts = content?.Parts;
+
+        var textPart = parts?.FirstOrDefault(p => p.Text != null);
+        var functionPart = parts?.FirstOrDefault(p => p.FunctionCall != null);
+
+        var googleResponse = new ChatResponse
         {
-            Content = content,
+            Content = textPart?.Text ?? string.Empty,
             FinishReason = candidate?.FinishReason,
             Usage = new Usage
             {
@@ -70,6 +96,21 @@ internal static class ChatResponseMappingExtensions
             Model = "gemini",
             CreatedAt = DateTime.UtcNow
         };
+
+        if (functionPart?.FunctionCall != null)
+        {
+            googleResponse.ToolCalls = new List<ToolCall>
+        {
+            new ToolCall
+            {
+                Id = functionPart.FunctionCall.Name ?? string.Empty,
+                Name = functionPart.FunctionCall.Name ?? string.Empty,
+                Arguments = functionPart.FunctionCall.Args ?? new()
+            }
+        };
+        }
+
+        return googleResponse;
     }
 
     internal static ChatResponse? ToChatResponse(this OllamaChatResponse response)
@@ -77,17 +118,30 @@ internal static class ChatResponseMappingExtensions
         if (response == null) return null;
 
         var content = response.Message?.Content ?? string.Empty;
-        return new ChatResponse
+        var ollamaResponse = new ChatResponse
         {
             Content = content,
             FinishReason = response.DoneReason,
             Usage = new Usage
             {
-                InputTokens = response.PromptEvalCount ?? 0, 
-                OutputTokens = response.EvalCount ?? 0
+                InputTokens = response.EvalCount ?? 0, 
+                OutputTokens = response.PromptEvalCount ?? 0
             },
             Model = response.Model,
             CreatedAt = DateTime.UtcNow
         };
+
+        if (response.Message?.ToolCalls != null && response.Message.ToolCalls.Count > 0)
+        {
+            ollamaResponse.ToolCalls = response.Message.ToolCalls.Select(tc => new ToolCall
+            {
+                Id = tc.Function?.Name ?? string.Empty,
+                Name = tc.Function?.Name ?? string.Empty,
+                Arguments = tc.Function?.Arguments ?? new()
+            }).ToList();
+        }
+
+
+        return ollamaResponse;
     }
 }

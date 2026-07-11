@@ -9,4 +9,7 @@ internal class AnthropicTextDelta
 
     [JsonPropertyName("text")]
     public string Text { get; set; } = string.Empty;
+
+    [JsonPropertyName("partial_json")]
+    public string? PartialJson { get; set; }
 }

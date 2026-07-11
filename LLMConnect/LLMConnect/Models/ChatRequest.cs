@@ -1,5 +1,6 @@
-﻿using LLMConnect.Models;
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
+
+namespace LLMConnect.Models;
 
 /// <summary>
 /// Represents a request to generate a chat completion, including the
@@ -32,11 +33,7 @@ public class ChatRequest
     /// </summary>
     public string? Model { get; set; }
 
-    /// <summary>
-    /// Reserved for future use. Currently the provider is determined by
-    /// <see cref="LLMConnect.Settings.LLMConnectClientOptions.Provider"/>, not by this property.
-    /// </summary>
-    //public string? Provider { get; set; }
+    // TODO: Implement Provider selection per request. Currently, the provider is determined by the options
 
     /// <summary>One or more sequences that, if generated, will cause the model to stop producing further tokens.</summary>
     public List<string>? StopSequences { get; set; }
@@ -55,6 +52,16 @@ public class ChatRequest
 
     /// <summary>An optional, opaque identifier representing the end user, used by some providers for abuse monitoring.</summary>
     public string? User { get; set; }
+
+    /// <summary>
+    /// A list of tools that the model can use to augment its responses. Not supported by every provider.
+    /// </summary>
+    public List<Tool>? Tools { get; set; }
+
+    /// <summary>
+    /// Indicates how the model should choose which tool to use, if any. Not supported by every provider.
+    /// </summary>
+    public string? ToolChoice { get; set; } // "auto", "required", "none", or a specific tool name
 
     // TODO: Tools support for function calling (Phase 2)
     // public List<Tool>? Tools { get; set; }

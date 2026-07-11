@@ -4,13 +4,13 @@ using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 using Moq;
 
-namespace LLMConnect.Tests.Factories;
+namespace LLMConnect.Tests.Streams.ChunkParsers;
 
 public class StreamChunkParserFactoryTests
 {
     private readonly Mock<ILogger> _loggerMock;
     private readonly Mock<ILoggerFactory> _loggerFactoryMock;
-    private readonly LLMConnectClientOptions _options;
+    private readonly LLMConnectGeneralOptions _options;
 
     public StreamChunkParserFactoryTests()
     {
@@ -20,25 +20,30 @@ public class StreamChunkParserFactoryTests
             .Setup(x => x.CreateLogger(It.IsAny<string>()))
             .Returns(_loggerMock.Object);
 
-        _options = new LLMConnectClientOptions
+        _options = new LLMConnectGeneralOptions
         {
             LoggerFactory = _loggerFactoryMock.Object
         };
     }
+
+    // ---------- Supported Providers ----------
 
     [Theory]
     [InlineData(ProviderType.OpenAI, typeof(OpenAIStreamChunkParser))]
     [InlineData(ProviderType.Anthropic, typeof(AnthropicStreamChunkParser))]
     [InlineData(ProviderType.Google, typeof(GoogleStreamChunkParser))]
     [InlineData(ProviderType.Ollama, typeof(OllamaStreamChunkParser))]
-    public void Create_ForSupportedProviders_ReturnsCorrectParserType(ProviderType provider, Type expectedType)
+    public void Create_ForSupportedProvider_ReturnsCorrectParserType(ProviderType provider, Type expectedType)
     {
         // Act
         var parser = StreamChunkParserFactory.Create(provider, _options);
 
         // Assert
         parser.Should().BeOfType(expectedType);
+        _loggerMock.VerifyNoOtherCalls();
     }
+
+    // ---------- Unsupported Provider ----------
 
     [Fact]
     public void Create_ForUnsupportedProvider_ThrowsNotSupportedException()
@@ -53,7 +58,6 @@ public class StreamChunkParserFactoryTests
         act.Should().Throw<NotSupportedException>()
             .WithMessage($"Provider '{unsupportedProvider.ToString()}' is not supported.*");
 
-        // Verify logger was called with error
         _loggerMock.Verify(
             x => x.Log(
                 LogLevel.Error,
@@ -64,18 +68,19 @@ public class StreamChunkParserFactoryTests
             Times.Once);
     }
 
+    // ---------- Null Logger Factory ----------
+
     [Fact]
     public void Create_WhenLoggerFactoryIsNull_DoesNotThrow()
     {
         // Arrange
-        var optionsWithoutLogger = new LLMConnectClientOptions
+        var optionsWithoutLogger = new LLMConnectGeneralOptions
         {
             LoggerFactory = null
         };
-        var provider = ProviderType.OpenAI;
 
         // Act
-        Action act = () => StreamChunkParserFactory.Create(provider, optionsWithoutLogger);
+        Action act = () => StreamChunkParserFactory.Create(ProviderType.OpenAI, optionsWithoutLogger);
 
         // Assert
         act.Should().NotThrow();
@@ -85,7 +90,7 @@ public class StreamChunkParserFactoryTests
     public void Create_WhenUnsupportedProviderAndLoggerFactoryIsNull_StillThrows()
     {
         // Arrange
-        var optionsWithoutLogger = new LLMConnectClientOptions
+        var optionsWithoutLogger = new LLMConnectGeneralOptions
         {
             LoggerFactory = null
         };
@@ -100,18 +105,37 @@ public class StreamChunkParserFactoryTests
         // No log verification because logger is null
     }
 
+    // ---------- Provider-Specific Parser Creation ----------
+
     [Fact]
-    public void Create_PassesOptionsToParserConstructor()
+    public void Create_ForOpenAI_ReturnsOpenAIStreamChunkParser()
     {
-        // Arrange
-        var provider = ProviderType.OpenAI;
-
-        // Act
-        var parser = StreamChunkParserFactory.Create(provider, _options);
-
-        // Assert
+        var parser = StreamChunkParserFactory.Create(ProviderType.OpenAI, _options);
         parser.Should().BeOfType<OpenAIStreamChunkParser>();
-        // We can verify that the logger was not used for error (since it's a valid provider)
-        _loggerMock.VerifyNoOtherCalls();
+        parser.Should().BeAssignableTo<IStreamChunkParser>();
+    }
+
+    [Fact]
+    public void Create_ForAnthropic_ReturnsAnthropicStreamChunkParser()
+    {
+        var parser = StreamChunkParserFactory.Create(ProviderType.Anthropic, _options);
+        parser.Should().BeOfType<AnthropicStreamChunkParser>();
+        parser.Should().BeAssignableTo<IStreamChunkParser>();
+    }
+
+    [Fact]
+    public void Create_ForGoogle_ReturnsGoogleStreamChunkParser()
+    {
+        var parser = StreamChunkParserFactory.Create(ProviderType.Google, _options);
+        parser.Should().BeOfType<GoogleStreamChunkParser>();
+        parser.Should().BeAssignableTo<IStreamChunkParser>();
+    }
+
+    [Fact]
+    public void Create_ForOllama_ReturnsOllamaStreamChunkParser()
+    {
+        var parser = StreamChunkParserFactory.Create(ProviderType.Ollama, _options);
+        parser.Should().BeOfType<OllamaStreamChunkParser>();
+        parser.Should().BeAssignableTo<IStreamChunkParser>();
     }
 }

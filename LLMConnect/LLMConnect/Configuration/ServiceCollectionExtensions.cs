@@ -1,53 +1,124 @@
 ﻿using LLMConnect.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace LLMConnect.Configuration;
 
 /// <summary>
-/// Extension class for .NET DI serviceCollection at startup for service configuration
+/// Extension methods for registering LLMConnect services in an IServiceCollection.
 /// </summary>
 public static class ServiceCollectionExtensions
 {
 
+    private static readonly object _lock = new object();
+    private static bool _coreServicesRegistered = false;
 
     /// <summary>
-    /// Adds the LLMConnect client to the dependency injection container.
+    /// Adds LLMConnect services to the IServiceCollection with a single configuration action for LLMConnectClientOptions.
     /// </summary>
-    /// <param name="services">The service collection.</param>
-    /// <param name="configure">Optional configuration delegate for <see cref="LLMConnectClientOptions"/>.</param>
-    /// <returns>The service collection for chaining.</returns>
+    /// <param name="services">The IServiceCollection to add services to.</param>
+    /// <param name="configure">The action to configure the LLMConnectClientOptions.</param>
+    /// <returns>The IServiceCollection with the added services.</returns>
     public static IServiceCollection AddLLMConnect(
         this IServiceCollection services,
         Action<LLMConnectClientOptions>? configure = null)
     {
-        if (configure != null)
-            services.Configure(configure);
-        else
-            services.Configure<LLMConnectClientOptions>(_ => { }); // creates a new one with default options, validation will handle this.
+        services.Configure(configure ?? (_ => { }));
 
-        services.AddHttpClient("LLMConnect")
-            .AddHttpMessageHandler(sp =>
-            {
-                var options = sp.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
-                var logger = options.LoggerFactory?.CreateLogger("LLMConnect.Retry");
-                return new RetryDelegatingHandler(options.MaxRetries, logger);
-            })
-            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
-            {
-                PooledConnectionLifetime = TimeSpan.FromMinutes(5)
-            });
+        RegisterCoreServices(services);
 
         services.AddSingleton<ILLMConnectClient>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<LLMConnectClientOptions>>().Value;
-            var factory = sp.GetRequiredService<IHttpClientFactory>();
-
-            return new LLMConnectClient(options, factory);
+            return new LLMConnectClient(options);
         });
 
         return services;
+    }
+
+
+
+    /// <summary>
+    /// Adds LLMConnect services to the IServiceCollection with separate configuration for general and endpoint options.
+    /// </summary>
+    /// <param name="services">The IServiceCollection to add services to.</param>
+    /// <param name="configureGeneral">The action to configure the general options.</param>
+    /// <param name="configureEndpoint">The action to configure the endpoint options.</param>
+    /// <returns>The IServiceCollection with the added services.</returns>
+    public static IServiceCollection AddLLMConnect(
+        this IServiceCollection services,
+        Action<LLMConnectGeneralOptions> configureGeneral,
+        Action<LLMConnectEndpointOptions> configureEndpoint)
+    {
+        services.Configure(configureGeneral);
+        services.Configure(configureEndpoint);
+
+        RegisterCoreServices(services);
+
+        services.AddSingleton<ILLMConnectClient>(sp =>
+        {
+            var general = sp.GetRequiredService<IOptions<LLMConnectGeneralOptions>>().Value;
+            var endpoint = sp.GetRequiredService<IOptions<LLMConnectEndpointOptions>>().Value;
+
+            return new LLMConnectClient(general, endpoint);
+        });
+
+        return services;
+    }
+
+
+    /// <summary>
+    /// Adds LLMConnect services to the IServiceCollection with a configuration action for general options only.
+    /// </summary>
+    /// <param name="services">The IServiceCollection to add services to.</param>
+    /// <param name="configureGeneral">The action to configure the general options.</param>
+    /// <returns>The IServiceCollection with the added services.</returns>
+    public static IServiceCollection AddLLMConnect(
+        this IServiceCollection services,
+        Action<LLMConnectGeneralOptions> configureGeneral)
+    {
+        services.Configure(configureGeneral);
+
+        RegisterCoreServices(services);
+
+        services.AddSingleton<ILLMConnectClient>(sp =>
+        {
+            var general = sp.GetRequiredService<IOptions<LLMConnectGeneralOptions>>().Value;
+            // Default endpoint options are created by the client's constructor
+            return new LLMConnectClient(general, new LLMConnectEndpointOptions());
+        });
+
+        return services;
+    }
+
+
+    // ---------- Core registration (safe, once) ----------
+
+    private static void RegisterCoreServices(IServiceCollection services)
+    {
+        if (_coreServicesRegistered)
+            return;
+
+        lock (_lock)
+        {
+            if (_coreServicesRegistered)
+                return;
+
+            services.AddHttpClient("LLMConnect")
+                .AddHttpMessageHandler(sp =>
+                {
+                    var options = sp.GetRequiredService<IOptions<LLMConnectGeneralOptions>>().Value;
+                    var logger = options.LoggerFactory?.CreateLogger("LLMConnect.Retry");
+
+                    return new RetryDelegatingHandler(options.MaxRetries, logger);
+                })
+                .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+                {
+                    PooledConnectionLifetime = TimeSpan.FromMinutes(5)
+                });
+
+            _coreServicesRegistered = true;
+        }
     }
 }

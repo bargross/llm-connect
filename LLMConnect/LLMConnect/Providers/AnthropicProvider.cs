@@ -1,63 +1,70 @@
-﻿using LLMConnect.Exceptions;
-using LLMConnect.Models;
+﻿using LLMConnect.Models;
 using LLMConnect.Settings;
-using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 
 namespace LLMConnect;
 
-internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions options): ProviderBase, ILLMProvider
+internal class AnthropicProvider: ProviderBase<AnthropicProvider>, ILLMProvider
 {
-    private readonly ILogger<AnthropicProvider>? _logger = options.LoggerFactory?.CreateLogger<AnthropicProvider>();
-    private readonly IChatRequestValidator _validator = ChatRequestValidatorFactory
-        .Create(options.Provider, options.LoggerFactory?.CreateLogger("ChatRequestValidatorFactory"));
+    private readonly HttpClient _httpClient;
+    private readonly LLMConnectEndpointOptions _endpointOpts;
+
+    public AnthropicProvider(HttpClient httpClient, LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions endpointOpts) : base(generalOpts)
+    {
+        _httpClient = httpClient;
+        _endpointOpts = endpointOpts;
+    }
 
     public async Task<ChatResponse?> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
-        _validator.Validate(request, _logger);
+        _chatRequestValidator.Validate(request, _logger);
 
-        var anthropicRequest = request.ToAnthropicRequest(options.InternalComputedDefaultModel());
+        var anthropicRequest = request.ToAnthropicRequest(_generalOpts.InternalComputedDefaultModel());
 
-        var json = JsonSerializer.Serialize(anthropicRequest);
+        var json = JsonSerializer.Serialize(anthropicRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var response = await httpClient.PostAsync("", content, cancellationToken);
+        var relativePath = GetUrlRelativePath(_endpointOpts, QueryType.Chat, false, null, _logger);
+        var response = await _httpClient.PostAsync(relativePath, content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-            await LogAndThrow(options.Provider, response, _logger, cancellationToken);
+            await LogAndThrow(_generalOpts.Provider, response, cancellationToken);
 
-        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        var anthropicChatResponse = GetResponse<AnthropicChatResponse>(responseJson, _logger, options.Provider);
-
-        return anthropicChatResponse?.ToChatResponse();
+        return await DeserializeResponseAsync<AnthropicChatResponse, ChatResponse>(
+            response,
+            _generalOpts.Provider,
+            anthropicResponse => anthropicResponse?.ToChatResponse(),
+            cancellationToken);
     }
 
     public async IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, [EnumeratorCancellation]  CancellationToken cancellationToken = default)
     {
-        _validator.Validate(request, _logger);
+        _chatRequestValidator.Validate(request, _logger);
 
-        var anthropicRequest = request.ToAnthropicRequest(options.InternalComputedDefaultModel());
+        var anthropicRequest = request.ToAnthropicRequest(_generalOpts.InternalComputedDefaultModel(request.Model));
 
         anthropicRequest.Stream = true;
 
-        var json = JsonSerializer.Serialize(anthropicRequest);
+        var relativePath = GetUrlRelativePath(_endpointOpts, QueryType.Chat, true, null, _logger);
+
+        var json = JsonSerializer.Serialize(anthropicRequest, DefaultJsonSerializerOptions);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using var messageReq = new HttpRequestMessage(HttpMethod.Post, httpClient.BaseAddress)
+        using var messageReq = new HttpRequestMessage(HttpMethod.Post, relativePath)
         {
             Content = content
         };
 
-        var response = await httpClient.SendAsync(messageReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        var response = await _httpClient.SendAsync(messageReq, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-            await LogAndThrow(options.Provider, response, _logger, cancellationToken);
+            await LogAndThrow(_generalOpts.Provider, response, cancellationToken);
 
         using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var reader = StreamReaderFactory.Create(options.Provider, options);
-        var parser = StreamChunkParserFactory.Create(options.Provider, options);
+
+        var reader = StreamReaderFactory.Create(_generalOpts.Provider, _generalOpts);
+        var parser = StreamChunkParserFactory.Create(_generalOpts.Provider, _generalOpts);
 
         await foreach (var evt in reader.ReadEventsAsync(stream, cancellationToken))
         {
@@ -66,4 +73,11 @@ internal class AnthropicProvider(HttpClient httpClient, LLMConnectClientOptions 
                 yield return chunk;
         }
     }
+
+    public async Task<EmbeddingResponse?> GetEmbeddingAsync(EmbeddingRequest request, CancellationToken cancellationToken = default)
+    {
+        _embeddingRequestValidator?.Validate(request, _logger); // validation will throw
+
+        throw new NotSupportedException(); // will never reach here
+    } 
 }

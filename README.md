@@ -2,10 +2,11 @@
 [![.NET](https://img.shields.io/badge/.NET-10.0-blue)](https://dotnet.microsoft.com/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/bargross/llm-connect/dotnet.yml?branch=main)](https://github.com/bargross/llm-connect/actions)
+[![Changelog](https://img.shields.io/badge/Changelog-view-blue)](./CHANGELOG.md)
 
 # LLMConnect
 
-A provider‑agnostic .NET client for Large Language Models. Write your chat logic once and run it against OpenAI, Anthropic, Google Gemini, or a local Ollama server through a single, consistent API.
+A provider-agnostic .NET client for Large Language Models. Write your chat, embedding, and tool-calling logic once and run it against OpenAI, Azure OpenAI, Anthropic, Google Gemini, or a local Ollama server through a single, consistent API.
 
 ---
 
@@ -22,14 +23,34 @@ A provider‑agnostic .NET client for Large Language Models. Write your chat log
   - [ChatRequest](#chatrequest)
   - [ChatResponse](#chatresponse)
   - [ChatChunk (streaming)](#chatchunk-streaming)
+  - [ToolCallDelta (streaming tool calls)](#toolcalldelta-streaming-tool-calls)
+  - [EmbeddingRequest](#embeddingrequest)
+  - [EmbeddingResponse](#embeddingresponse)
+  - [Tool and JsonSchema](#tool-and-jsonschema)
+  - [ToolCall](#toolcall)
   - [Usage](#usage)
 - [Configuration](#configuration)
-  - [LLMConnectClientOptions reference](#llmconnectclientoptions-reference)
+  - [Unified options: LLMConnectClientOptions](#unified-options-llmconnectclientoptions)
+  - [Split options: LLMConnectGeneralOptions and LLMConnectEndpointOptions](#split-options-llmconnectgeneraloptions-and-llmconnectendpointoptions)
+  - [Full options reference](#full-options-reference)
   - [Choosing a constructor](#choosing-a-constructor)
-  - [Provider‑specific notes](#provider-specific-notes)
+  - [Provider-specific notes](#provider-specific-notes)
+- [Azure OpenAI](#azure-openai)
+- [Embeddings](#embeddings)
+  - [Basic usage](#basic-usage)
+  - [Provider support matrix](#embeddings-provider-support-matrix)
+  - [Per-provider embedding options](#per-provider-embedding-options)
+- [Tool calling](#tool-calling)
+  - [Defining tools](#defining-tools)
+  - [Sending tools in a request](#sending-tools-in-a-request)
+  - [Handling tool call responses](#handling-tool-call-responses)
+  - [Returning tool results](#returning-tool-results)
+  - [Tool choice](#tool-choice)
+  - [Provider support matrix](#tool-calling-provider-support-matrix)
+  - [Provider-specific notes](#tool-calling-provider-specific-notes)
+- [Streaming tool calls](#streaming-tool-calls)
 - [Dependency injection](#dependency-injection)
 - [Retry behavior](#retry-behavior)
-- [Streaming](#streaming)
 - [Error handling](#error-handling)
 - [Known limitations](#known-limitations)
 - [Roadmap](#roadmap)
@@ -40,19 +61,22 @@ A provider‑agnostic .NET client for Large Language Models. Write your chat log
 
 ## What is LLMConnect?
 
-LLMConnect is a unified client library for .NET that abstracts away the differences between multiple LLM providers. It gives you one interface — `ILLMConnectClient` — for chat completions and streaming, regardless of which provider sits behind it.
+LLMConnect is a unified client library for .NET that abstracts away the differences between multiple LLM providers. It gives you one interface — `ILLMConnectClient` — for chat completions, streaming, vector embeddings, and tool/function calling, regardless of which provider sits behind it.
 
-Stop learning a new SDK every time you want to switch providers. Write your application logic once against `ChatRequest` / `ChatResponse` / `ChatChunk`, and change providers with a single configuration value.
+Stop learning a new SDK every time you want to switch providers or add a capability. Write your application logic once against `ChatRequest`/`ChatResponse`/`EmbeddingRequest`/`EmbeddingResponse`, and change providers with a single configuration value.
 
 ---
 
 ## Features
 
-- Provider‑agnostic core: one request/response model shape for OpenAI, Anthropic, Google Gemini, and Ollama
-- Non‑streaming (`ChatAsync`) and streaming (`StreamAsync`) chat completions
-- Built‑in retry with exponential backoff and jitter, backed by [Polly](https://github.com/App-vNext/Polly)
+- Provider-agnostic core — one request/response model for OpenAI, Azure OpenAI, Anthropic, Google Gemini, and Ollama
+- Non-streaming (`ChatAsync`) and streaming (`StreamAsync`) chat completions
+- **Vector embeddings** (`GetEmbeddingAsync`) for OpenAI, Azure OpenAI, Google, and Ollama
+- **Tool/function calling** across all five providers, including streaming tool call deltas
+- **Azure OpenAI** as a first-class provider — base URL constructed internally from named options, same wire format as OpenAI
+- **Split configuration** via `LLMConnectGeneralOptions` + `LLMConnectEndpointOptions`, or a single `LLMConnectClientOptions` for simple setups
+- Built-in retry with exponential backoff and jitter, backed by [Polly](https://github.com/App-vNext/Polly)
 - Dependency Injection support via `Microsoft.Extensions.DependencyInjection`
-- Per‑instance default model, configurable timeout and retry count
 - Strongly typed message roles (`SystemMessage`, `UserMessage`, `AssistantMessage`, `ToolMessage`)
 - Optional structured logging via `Microsoft.Extensions.Logging`
 - Full async/await and `IAsyncEnumerable` support for streaming
@@ -62,14 +86,35 @@ Stop learning a new SDK every time you want to switch providers. Write your appl
 
 ## Supported providers
 
-| Provider | Non‑Streaming | Streaming | Auth |
+### Chat completions
+
+| Provider | Non-Streaming | Streaming | Auth |
 | :--- | :---: | :---: | :--- |
 | OpenAI | ✅ | ✅ | `Authorization: Bearer <key>` |
+| Azure OpenAI | ✅ | ✅ | `api-key` header |
 | Anthropic | ✅ | ✅ | `x-api-key` header |
 | Google Gemini | ✅ | ✅ | `x-goog-api-key` header |
 | Ollama (local) | ✅ | ✅ | none |
 
-Streaming uses Server‑Sent Events (SSE) for OpenAI, Anthropic, and Google, and newline‑delimited JSON (NDJSON) for Ollama. This is handled internally — you consume the same `IAsyncEnumerable<ChatChunk>` regardless of provider.
+### Embeddings
+
+| Provider | Supported | Notes |
+| :--- | :---: | :--- |
+| OpenAI | ✅ | Model, dimensions, encoding format |
+| Azure OpenAI | ✅ | Same as OpenAI, routed through Azure deployment |
+| Google Gemini | ✅ | Model, task type, title, role |
+| Ollama (local) | ✅ | Model, extra options pass-through |
+| Anthropic | ❌ | Not supported by the Anthropic API |
+
+### Tool calling
+
+| Provider | Supported | Notes |
+| :--- | :---: | :--- |
+| OpenAI | ✅ | Full support including parallel tool calls |
+| Azure OpenAI | ✅ | Identical to OpenAI |
+| Anthropic | ✅ | Via `tool_use` content blocks |
+| Google Gemini | ✅ | Via `functionDeclarations` / `functionCall` |
+| Ollama (local) | ✅ | Requires a compatible model |
 
 ---
 
@@ -89,6 +134,8 @@ Install-Package LLMConnect
 
 ## Quick start
 
+### Chat
+
 ```csharp
 using LLMConnect;
 using LLMConnect.Models;
@@ -96,8 +143,8 @@ using LLMConnect.Settings;
 
 var options = new LLMConnectClientOptions
 {
-    Provider = ProviderType.OpenAI,
-    ApiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")!,
+    Provider     = ProviderType.OpenAI,
+    ApiKey       = Environment.GetEnvironmentVariable("OPENAI_API_KEY")!,
     DefaultModel = "gpt-4o-mini"
 };
 
@@ -108,7 +155,7 @@ var request = new ChatRequest
     Messages =
     [
         new SystemMessage("You are a concise, helpful assistant."),
-        new UserMessage("What's the capital of Romania?")
+        new UserMessage("What is the capital of Romania?")
     ]
 };
 
@@ -116,7 +163,7 @@ var response = await client.ChatAsync(request);
 Console.WriteLine(response?.Content);
 ```
 
-Streaming looks the same, but consumes an `IAsyncEnumerable<ChatChunk>`:
+### Streaming
 
 ```csharp
 await foreach (var chunk in client.StreamAsync(request))
@@ -128,15 +175,56 @@ await foreach (var chunk in client.StreamAsync(request))
 }
 ```
 
-Switching providers is a configuration change, not a code change:
+### Embeddings
 
 ```csharp
-var options = new LLMConnectClientOptions
+var embeddingRequest = new EmbeddingRequest
 {
-    Provider = ProviderType.Anthropic,
-    ApiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")!,
-    DefaultModel = "claude-3-5-sonnet-20241022"
+    Text  = "The quick brown fox jumps over the lazy dog.",
+    Model = "text-embedding-3-small"
 };
+
+var embeddingResponse = await client.GetEmbeddingAsync(embeddingRequest);
+Console.WriteLine($"Dimensions: {embeddingResponse!.Embedding.Length}");
+```
+
+### Tool calling
+
+```csharp
+var tools = new List<Tool>
+{
+    new Tool
+    {
+        Name        = "get_weather",
+        Description = "Returns the current weather for a given city.",
+        Parameters  = new Dictionary<string, JsonSchema>
+        {
+            ["city"] = new JsonSchema { Type = "string", Description = "The city name." }
+        },
+        Required = ["city"]
+    }
+};
+
+var request = new ChatRequest
+{
+    Messages = [new UserMessage("What is the weather like in Bucharest?")],
+    Tools    = tools
+};
+
+var response = await client.ChatAsync(request);
+
+if (response?.ToolCalls?.Count > 0)
+{
+    var call = response.ToolCalls[0];
+    Console.WriteLine($"Tool: {call.Name}, Args: {string.Join(", ", call.Arguments.Select(kv => $"{kv.Key}={kv.Value}"))}");
+}
+```
+
+Switching providers is a one-line change:
+
+```csharp
+options.Provider = ProviderType.Anthropic;
+options.ApiKey   = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")!;
 ```
 
 ---
@@ -145,165 +233,71 @@ var options = new LLMConnectClientOptions
 
 ### The client
 
-The entry point is `ILLMConnectClient`, implemented by `LLMConnectClient`. It exposes two methods:
+The entry point is `ILLMConnectClient`, implemented by `LLMConnectClient`:
 
 ```csharp
 Task<ChatResponse?> ChatAsync(ChatRequest request, CancellationToken cancellationToken = default);
 IAsyncEnumerable<ChatChunk> StreamAsync(ChatRequest request, CancellationToken cancellationToken = default);
+Task<EmbeddingResponse?> GetEmbeddingAsync(EmbeddingRequest request, CancellationToken cancellationToken = default);
 ```
 
-`LLMConnectClient` implements `IDisposable`. If the client created its own internal `HttpClient` (i.e. you used the options‑only constructor), disposing the client disposes that `HttpClient` too. If you supplied your own `HttpClient` or an `IHttpClientFactory`, LLMConnect will not dispose it — you remain the owner.
+`LLMConnectClient` implements `IDisposable`. If it created its own `HttpClient`, disposing the client disposes it too. If you supplied your own `HttpClient` or `IHttpClientFactory`, you remain the owner and LLMConnect will not dispose it.
 
 ### Messages
 
-`ChatRequest.Messages` is a `List<Message>`. `Message` is abstract; construct one of the concrete role types instead:
+`ChatRequest.Messages` is a `List<Message>`. Construct one of the concrete role types:
 
 ```csharp
 new SystemMessage("You are a helpful assistant.");
 new UserMessage("Hello!");
 new AssistantMessage("Hi, how can I help?");
-new ToolMessage(toolCallId: "call_123", content: "{\"result\": 42}");
+new ToolMessage(toolCallId: "call_abc123", content: "{\"temperature\": 22}");
 ```
 
-Each maps to the corresponding `MessageRole` (`System`, `User`, `Assistant`, `Tool`) and is translated into the wire format each provider expects.
+Each maps to the corresponding `MessageRole` (`System`, `User`, `Assistant`, `Tool`) and is serialized into the wire format each provider expects.
 
 ### ChatRequest
 
 ```csharp
 public class ChatRequest
 {
-    public List<Message> Messages { get; set; } = new();
+    public List<Message> Messages { get; set; }
     public string? SystemPrompt { get; set; }
-    public float Temperature { get; set; } = 0.7f;
-    public float TopP { get; set; } = 0.9f;
-    public int MaxTokens { get; set; } = 1024;
-    public string? Model { get; set; }
-    public string? Provider { get; set; }
+    public float Temperature { get; set; }          // default 0.7
+    public float TopP { get; set; }                 // default 0.9
+    public int MaxTokens { get; set; }              // default 1024
+    public string? Model { get; set; }              // overrides DefaultModel
     public List<string>? StopSequences { get; set; }
-    public float? FrequencyPenalty { get; set; }
-    public float? PresencePenalty { get; set; }
-    public string? ResponseFormat { get; set; } // "text" or "json_object"
-    public int? Seed { get; set; }
+    public float? FrequencyPenalty { get; set; }    // OpenAI / Azure only
+    public float? PresencePenalty { get; set; }     // OpenAI / Azure only
+    public string? ResponseFormat { get; set; }     // "text" or "json_object"
+    public int? Seed { get; set; }                  // OpenAI / Azure only
     public string? User { get; set; }
-    public Dictionary<string, object>? ExtraParameters { get; set; }
+    public List<Tool>? Tools { get; set; }
+    public string? ToolChoice { get; set; }         // "auto", "required", "none", or a tool name
+    public Dictionary<string, object>? ExtraParameters { get; set; } // [JsonExtensionData]
 }
 ```
 
-## Properties
-
-| Property | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `Messages` | `List<Message>` | `new()` | **Required.** The conversation history. Must contain at least one message. Each message has a `Role` (System, User, Assistant, Tool) and `Content`. |
-| `SystemPrompt` | `string?` | `null` | The system instruction that defines the assistant's behavior, personality, and constraints. Overrides any system messages in the `Messages` list. |
-| `Temperature` | `float` | `0.7f` | Controls randomness. Lower values (e.g., 0.2) make output more deterministic and focused. Higher values (e.g., 0.8) make output more creative and diverse. Range: 0.0 – 1.0. |
-| `TopP` | `float` | `0.9f` | Nucleus sampling. The model considers the smallest set of tokens whose cumulative probability exceeds `TopP`. Use with `Temperature` for fine-tuned control. Range: 0.0 – 1.0. |
-| `MaxTokens` | `int` | `1024` | The maximum number of tokens to generate in the response. This includes both input and output tokens for some providers. |
-| `Model` | `string?` | `null` | The model to use. If `null`, falls back to the `DefaultModel` set in `LLMClientOptions`. Provider-specific examples: `"gpt-4"`, `"claude-3-5-sonnet-20241022"`, `"gemini-2.0-flash"`, `"llama3.2"`. |
-| `Provider` | `string?` | `null` | Override the default provider for this request only. If `null`, uses the `Provider` from `LLMClientOptions`. |
-| `StopSequences` | `List<string>?` | `null` | Stop generation when one of these strings is encountered. The generated text will not include the stop sequence. |
-| `FrequencyPenalty` | `float?` | `null` | Penalizes repeated tokens. Positive values decrease the likelihood of repeating the same token. Range: -2.0 – 2.0. |
-| `PresencePenalty` | `float?` | `null` | Penalizes tokens that have already appeared in the conversation. Positive values encourage the model to discuss new topics. Range: -2.0 – 2.0. |
-| `ResponseFormat` | `string?` | `null` | Controls the response format. Supported values: `"text"` (default) or `"json_object"` (forces valid JSON output). Provider support varies. |
-| `Seed` | `int?` | `null` | For deterministic generation. The same seed + same parameters produces the same output (when supported by the provider). |
-| `User` | `string?` | `null` | A unique identifier for the end-user. Used for abuse monitoring and usage tracking (e.g., OpenAI). |
-| `ExtraParameters` | `Dictionary<string, object>?` | `null` | A flexible dictionary for provider-specific parameters. Useful for advanced features not yet supported natively (e.g., `"top_k"` for Ollama). |
-
----
-
-## Provider Compatibility
-
-| Parameter | OpenAI | Anthropic | Google | Ollama |
-| :--- | :--- | :--- | :--- | :--- |
-| `Messages` | ✅ | ✅ | ✅ | ✅ |
-| `SystemPrompt` | ✅ | ✅ (top-level `system`) | ✅ (`systemInstruction`) | ✅ (as a `system` message) |
-| `Temperature` | ✅ | ✅ | ✅ | ✅ |
-| `TopP` | ✅ | ✅ | ✅ | ✅ |
-| `MaxTokens` | ✅ | ✅ | ✅ (`maxOutputTokens`) | ✅ (`numPredict`) |
-| `Model` | ✅ | ✅ | ✅ | ✅ |
-| `Provider` | ✅ | ✅ | ✅ | ✅ |
-| `StopSequences` | ✅ | ✅ | ❌ (use `ExtraParameters`) | ✅ (`stop`) |
-| `FrequencyPenalty` | ✅ | ❌ | ❌ | ❌ (handled via `ExtraParameters`) |
-| `PresencePenalty` | ✅ | ❌ | ❌ | ❌ (handled via `ExtraParameters`) |
-| `ResponseFormat` | ✅ | ❌ (warning logged) | ❌ (warning logged) | ❌ (warning logged) |
-| `Seed` | ✅ | ❌ (warning logged) | ❌ (warning logged) | ❌ (warning logged) |
-| `User` | ✅ | ❌ | ❌ | ❌ |
-| `ExtraParameters` | ✅ | ✅ | ✅ | ✅ |
-
----
-
-## Validation Rules
-
-| Rule | Description |
-| :--- | :--- |
-| `Messages` must not be empty | At least one message is required. Throws `ArgumentException` if empty. |
-| `Temperature` must be between 0.0 and 1.0 | Throws `ArgumentException` if out of range. |
-| `MaxTokens` must be greater than 0 | Throws `ArgumentException` if less than 1. |
-| `StopSequences` cannot contain empty or whitespace strings | Throws `ArgumentException` if any sequence is empty or whitespace. |
-| `ResponseFormat` must be `"text"` or `"json_object"` | Only validated for OpenAI. For other providers, a warning is logged. |
-| `Seed` must be non-negative | Only validated for OpenAI. For other providers, a warning is logged. |
-
----
-
-Notes:
-
-- `Model` overrides `LLMConnectClientOptions.DefaultModel` for a single request.
-- Not every provider supports every field (e.g. `Seed` and `FrequencyPenalty`/`PresencePenalty` are OpenAI‑specific concepts). Providers that don't understand a field simply ignore it rather than failing the request.
-- `ExtraParameters` is serialized as additional top‑level JSON properties on the outgoing request (`[JsonExtensionData]`), so you can pass provider‑specific options LLMConnect doesn't model explicitly without waiting for a library update.
-- Function/tool calling (`Tools` on the request) is **not implemented yet** — see [Known limitations](#known-limitations).
+`ExtraParameters` is serialized as additional top-level JSON properties, letting you pass provider-specific options without waiting for a library update.
 
 ### ChatResponse
-
-Returned by `ChatAsync` for non‑streaming calls:
 
 ```csharp
 public class ChatResponse
 {
     public string? Content { get; set; }
     public string? FinishReason { get; set; }
-    public Usage Usage { get; set; } = new();
+    public Usage Usage { get; set; }
     public string? Model { get; set; }
     public DateTime CreatedAt { get; set; }
+    public List<ToolCall>? ToolCalls { get; set; }  // non-null when the model calls a tool
 }
 ```
 
-## Properties
-
-| Property | Type | Description |
-| :--- | :--- | :--- |
-| `Content` | `string?` | The generated response text from the assistant. May be `null` if the response is empty or if an error occurred. |
-| `FinishReason` | `string?` | The reason why the generation stopped. Common values: `"stop"` (natural stop), `"length"` (max tokens reached), `"content_filter"` (blocked), `"tool_calls"`, etc. Provider-specific values may vary. |
-| `Usage` | `Usage` | Token usage statistics for the request. Includes input tokens, output tokens, and total tokens. |
-| `Model` | `string?` | The actual model that was used to generate the response. May differ from the requested model (e.g., if the provider routed to a different model). |
-| `CreatedAt` | `DateTime` | The timestamp when the response was created. For providers that return a Unix timestamp, this is converted to UTC `DateTime`. |
-
----
-
-## Usage Class
-
-The `Usage` class provides token usage statistics.
-
-| Property | Type | Description |
-| :--- | :--- | :--- |
-| `InputTokens` | `int` | The number of tokens in the input (prompt + system message). |
-| `OutputTokens` | `int` | The number of tokens generated in the response. |
-| `TotalTokens` | `int` | The total number of tokens (input + output). Calculated automatically. |
-
----
-
-## Provider-Specific Notes
-
-| Provider | `FinishReason` Values | Notes |
-| :--- | :--- | :--- |
-| **OpenAI** | `"stop"`, `"length"`, `"content_filter"`, `"tool_calls"` | `Usage` maps to `prompt_tokens` and `completion_tokens`. |
-| **Anthropic** | `"end_turn"`, `"max_tokens"`, `"stop_sequence"`, `"tool_use"` | `Usage` maps to `input_tokens` and `output_tokens`. |
-| **Google** | `"STOP"`, `"MAX_TOKENS"`, `"SAFETY"`, `"RECITATION"` | `Usage` maps to `promptTokenCount` and `candidatesTokenCount`. |
-| **Ollama** | `"stop"`, `"max_tokens"` | `Usage` maps to `prompt_eval_count` and `eval_count`. |
-
----
+Check `ToolCalls` before assuming `Content` contains the final answer — when the model calls a tool, `Content` may be empty or null.
 
 ### ChatChunk (streaming)
-
-Returned by `StreamAsync`, one instance per streamed delta:
 
 ```csharp
 public class ChatChunk
@@ -311,62 +305,92 @@ public class ChatChunk
     public string? Content { get; set; }
     public bool IsComplete { get; set; }
     public string? FinishReason { get; set; }
+    public List<ToolCallDelta>? ToolCalls { get; set; }  // populated during streamed tool calls
 }
 ```
 
-## Properties
+### ToolCallDelta (streaming tool calls)
 
-| Property | Type | Description |
-| :--- | :--- | :--- |
-| `Content` | `string?` | A fragment of the generated response text. Chunks are streamed incrementally and should be concatenated in order to form the complete message. May be `null` or empty if the chunk does not contain text (e.g., a chunk that only signals completion). |
-| `IsComplete` | `bool` | Indicates whether this is the final chunk in the stream. When `true`, the stream has ended and no more chunks will be received. |
-| `FinishReason` | `string?` | The reason why the generation stopped. This is typically only present on the final chunk (when `IsComplete` is `true`). Common values: `"stop"`, `"length"`, `"content_filter"`, `"tool_calls"`, etc. Provider-specific values may vary. |
-
----
-
-## How Streaming Works
-
-1. The user calls `StreamAsync` on the client.
-2. The provider sends the response incrementally.
-3. Each chunk is yielded as a `ChatChunk` object.
-4. The consumer concatenates `Content` from each chunk.
-5. The final chunk has `IsComplete = true` and may contain `FinishReason`.
-
----
-
-## Provider-Specific Notes
-
-| Provider | `FinishReason` Values | When `FinishReason` Is Sent |
-| :--- | :--- | :--- |
-| **OpenAI** | `"stop"`, `"length"`, `"content_filter"`, `"tool_calls"` | On the final chunk (after `data: [DONE]`). |
-| **Anthropic** | `"end_turn"`, `"max_tokens"`, `"stop_sequence"`, `"tool_use"` | On the final `message_stop` event. |
-| **Google** | `"STOP"`, `"MAX_TOKENS"`, `"SAFETY"`, `"RECITATION"` | On the final chunk containing `finishReason`. |
-| **Ollama** | `"stop"`, `"max_tokens"` | On the final chunk with `done: true`. |
-
----
-
-## Example: Streaming Usage
+During a stream, tool call arguments arrive as incremental JSON fragments across multiple chunks. Each chunk carries a `List<ToolCallDelta>` where `ArgumentsDelta` is the partial JSON for that chunk only. Accumulate `ArgumentsDelta` across all chunks with the same `Index` and deserialize the complete string when `IsComplete` is true.
 
 ```csharp
-await foreach (var chunk in client.StreamAsync(request))
+public class ToolCallDelta
 {
-    // Append content to build the full response
-    Console.Write(chunk.Content);
-
-    // Check if the stream is complete
-    if (chunk.IsComplete)
-    {
-        Console.WriteLine($"\nStream ended. Reason: {chunk.FinishReason ?? "Unknown"}");
-    }
+    public int Index { get; set; }            // identifies which tool call this delta belongs to
+    public string? Id { get; set; }           // present on the first delta for each call
+    public string? Name { get; set; }         // present on the first delta for each call
+    public string? ArgumentsDelta { get; set; } // partial JSON fragment for this chunk
 }
 ```
 
-**Notes**
-- Content may be null or empty on chunks that do not contain text (e.g., a chunk that only signals completion with FinishReason).
-- IsComplete is false for all chunks except the last one.
-- FinishReason is only present on the final chunk (when IsComplete is true). For providers that do not return a finish reason, it may be null.
-- Always check IsComplete to know when the stream has ended — do not rely on the absence of chunks.
-- The total response is built by concatenating all Content values in order.
+Provider behaviour differences:
+
+- **OpenAI / Azure**: `Id` and `Name` arrive on the first delta for each call index; subsequent deltas for the same index carry only `ArgumentsDelta`.
+- **Anthropic**: `Id` and `Name` arrive on the first delta; argument fragments arrive as `input_json_delta` events. `FinishReason` is populated from `message_delta.stop_reason`.
+- **Google**: each chunk contains a complete `functionCall` part (not incremental); `ArgumentsDelta` is the full serialized args JSON on each chunk.
+- **Ollama**: tool calls arrive fully formed in a single chunk on supporting models.
+
+### EmbeddingRequest
+
+```csharp
+public class EmbeddingRequest
+{
+    public string? Text { get; set; }             // required; must be non-null, non-whitespace
+    public string? Model { get; set; }
+    public string? User { get; set; }             // OpenAI / Azure: abuse monitoring
+    public string? EncodingFormat { get; set; }   // OpenAI / Azure: "float" or "base64"
+    public int? Dimensions { get; set; }          // OpenAI / Azure: output dimensionality
+    public string? TaskType { get; set; }         // Google: e.g. "RETRIEVAL_DOCUMENT"
+    public string? Title { get; set; }            // Google: document title
+    public string? Role { get; set; }             // Google: "user" or "model"
+    public Dictionary<string, object>? ExtraParameters { get; set; }
+}
+```
+
+### EmbeddingResponse
+
+```csharp
+public class EmbeddingResponse
+{
+    public float[] Embedding { get; set; }     // the embedding vector
+    public string? Model { get; set; }
+    public EmbeddingUsage? Usage { get; set; } // token usage; OpenAI/Azure only, null otherwise
+    public DateTime CreatedAt { get; set; }
+}
+```
+
+### Tool and JsonSchema
+
+```csharp
+public class Tool
+{
+    public string Name { get; set; }
+    public string Description { get; set; }
+    public Dictionary<string, JsonSchema> Parameters { get; set; }
+    public List<string> Required { get; set; }
+}
+
+public class JsonSchema
+{
+    public string Type { get; set; }                           // "string", "number", "boolean", "object", "array"
+    public string? Description { get; set; }
+    public JsonSchema? Items { get; set; }                     // for array types
+    public Dictionary<string, JsonSchema>? Properties { get; set; } // for object types
+    public List<object>? Enum { get; set; }
+    public Dictionary<string, object>? Extra { get; set; }    // additional JSON Schema keywords
+}
+```
+
+### ToolCall
+
+```csharp
+public class ToolCall
+{
+    public string Id { get; set; }
+    public string Name { get; set; }
+    public Dictionary<string, object> Arguments { get; set; } // fully deserialized
+}
+```
 
 ### Usage
 
@@ -375,7 +399,7 @@ public class Usage
 {
     public int InputTokens { get; set; }
     public int OutputTokens { get; set; }
-    public int TotalTokens => InputTokens + OutputTokens; // computed
+    public int TotalTokens => InputTokens + OutputTokens;
 }
 ```
 
@@ -383,221 +407,480 @@ public class Usage
 
 ## Configuration
 
-### LLMConnectClientOptions reference
+LLMConnect offers two configuration models.
 
-The `LLMConnectClientOptions` class provides configuration for an `LLMConnectClient` instance. It controls which provider to use, authentication, endpoint overrides, timeouts, retries, and logging.
+### Unified options: LLMConnectClientOptions
 
----
-
-| Property | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `Provider` | `ProviderType` | `OpenAI` | Which provider to target: `OpenAI`, `Anthropic`, `Google`, `Ollama`. |
-| `ApiKey` | `string` | `""` | Provider API key. Not required for `Ollama`. |
-| `DefaultModel` | `string?` | `null` | Model used when `ChatRequest.Model` is not set. |
-| `Endpoint` | `string?` | `null` | Override the default endpoint URL for the provider. Takes precedence over `OllamaPort` if both are set. |
-| `OllamaPort` | `int?` | `null` (→ `11434`) | Port for a local Ollama server. Ignored if `Endpoint` is set. |
-| `Timeout` | `TimeSpan` | `60s` | Per‑request HTTP timeout. |
-| `MaxRetries` | `int` | `3` | Maximum retry attempts on transient failures (must be `>= 0`). |
-| `LoggerFactory` | `ILoggerFactory?` | `null` | Optional. If provided, LLMConnect emits structured logs (retries, errors) through it. |
-| `ExtraOptions` | `Dictionary<string, object>?` | `null` | Reserved for future provider‑specific configuration. |
-
-## Provider-Specific Notes
-
-| Property | OpenAI | Anthropic | Google | Ollama |
-| :--- | :--- | :--- | :--- | :--- |
-| `ApiKey` | ✅ Required | ✅ Required | ✅ Required | ❌ Not required |
-| `Endpoint` | ✅ Optional (override) | ✅ Optional (override) | ✅ Optional (override) | ✅ Optional (override) |
-| `OllamaPort` | ❌ N/A | ❌ N/A | ❌ N/A | ✅ Uses `{port}` in endpoint |
-| `DefaultModel` | ✅ Fallback | ✅ Fallback | ✅ Fallback | ✅ Fallback |
-
----
-
-## Default Models
-
-When `DefaultModel` is not set, the library uses these provider-specific defaults:
-
-| Provider | Default Model |
-| :--- | :--- |
-| `OpenAI` | `gpt-3.5-turbo` |
-| `Anthropic` | `claude-3-5-sonnet-20241022` |
-| `Google` | `gemini-2.0-flash` |
-| `Ollama` | `llama3.2` |
-
----
-
-## Endpoint Resolution
-
-The library resolves the endpoint in the following order:
-
-1. **Custom endpoint** – If `Endpoint` is set, it is used as-is.
-2. **Ollama port override** – If `Provider` is `Ollama` and `OllamaPort` is set, the endpoint becomes `http://localhost:{port}/api/chat`.
-3. **Default endpoint** – Falls back to the provider's default endpoint from `EndpointRegistry`.
-
-If you need a fully custom endpoint (e.g., Azure OpenAI, a proxy, or a different host), set `Endpoint` to the full URL.
-
----
-
-## Validation Rules
-
-| Rule | Description |
-| :--- | :--- |
-| `ApiKey` required for cloud providers | `OpenAI`, `Anthropic`, and `Google` require a non-empty `ApiKey`. |
-| `Timeout` must be greater than zero | Throws `ArgumentException` if `Timeout <= TimeSpan.Zero`. |
-| `MaxRetries` must be >= 0 | Throws `ArgumentException` if `MaxRetries < 0`. |
-| `DefaultModel` cannot exceed 100 characters | Throws `ArgumentException` if longer than 100 characters. |
-| `Endpoint` must be a valid URL | If provided, must be a well-formed absolute URL. |
-| `Endpoint` must use HTTPS for cloud providers | HTTP is only allowed for `Ollama` or `localhost`. |
-| `OllamaPort` must be between 1 and 65535 | Throws `ArgumentException` if out of range. |
-
----
-
-## Usage Examples
-
-### 1. Cloud Provider (OpenAI)
+All settings in one object. Suitable for most applications.
 
 ```csharp
 var options = new LLMConnectClientOptions
 {
-    Provider = ProviderType.OpenAI,
-    ApiKey = "sk-...",
-    DefaultModel = "gpt-4",
-    Timeout = TimeSpan.FromSeconds(30),
-    MaxRetries = 3
+    Provider     = ProviderType.OpenAI,
+    ApiKey       = Environment.GetEnvironmentVariable("OPENAI_API_KEY")!,
+    DefaultModel = "gpt-4o-mini",
+    Timeout      = TimeSpan.FromSeconds(90),
+    MaxRetries   = 3
+};
+
+using var client = new LLMConnectClient(options);
+```
+
+For Azure OpenAI, add the three Azure-specific fields:
+
+```csharp
+var options = new LLMConnectClientOptions
+{
+    Provider             = ProviderType.AzureOpenAI,
+    ApiKey               = Environment.GetEnvironmentVariable("AZURE_OPENAI_KEY")!,
+    AzureResourceName    = "my-resource",
+    AzureDeploymentName  = "my-gpt4o-deployment",
+    AzureApiVersion      = "2024-10-21"
 };
 ```
 
-### Choosing a constructor
+### Split options: LLMConnectGeneralOptions and LLMConnectEndpointOptions
 
-`LLMConnectClient` has three constructors, each suited to a different hosting scenario:
+Separates identity/auth concerns from endpoint configuration. Useful when the endpoint options are determined at runtime, loaded from different configuration sources, or when you want to register each independently in DI.
 
 ```csharp
-// 1. Library manages its own HttpClient (simplest option for console apps, scripts, tests)
-new LLMConnectClient(options);
+var generalOpts = new LLMConnectGeneralOptions
+{
+    Provider     = ProviderType.AzureOpenAI,
+    ApiKey       = Environment.GetEnvironmentVariable("AZURE_OPENAI_KEY")!,
+    DefaultModel = "gpt-4o-mini",
+    MaxRetries   = 3
+};
 
-// 2. You manage the HttpClient yourself (you own its lifetime and any handlers)
-new LLMConnectClient(options, httpClient);
+var endpointOpts = new LLMConnectEndpointOptions
+{
+    AzureResourceName   = "my-resource",
+    AzureDeploymentName = "my-gpt4o-deployment",
+    AzureApiVersion     = "2024-10-21"
+};
 
-// 3. You provide an IHttpClientFactory (recommended for ASP.NET Core / long-running services)
-new LLMConnectClient(options, httpClientFactory);
+using var client = new LLMConnectClient(generalOpts, endpointOpts);
 ```
 
-> **Important:** retry behavior differs by constructor. The options‑only constructor (1) and a manually constructed factory path both attach LLMConnect's own retry handler automatically. If you pass in your **own** `HttpClient` (2), you are responsible for configuring retry/resilience yourself — LLMConnect will not add a retry handler to a client it doesn't own, and will log a warning to that effect if a logger is configured.
+### Full options reference
 
-### Provider‑specific notes
+#### LLMConnectGeneralOptions / LLMConnectClientOptions (shared fields)
 
-**OpenAI** — streaming ends with a literal `data: [DONE]` sentinel on the wire; `ChatChunk.FinishReason` is populated from the final non‑`[DONE]` chunk's `finish_reason` field when present.
+| Property | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `Provider` | `ProviderType` | `OpenAI` | Target provider. |
+| `ApiKey` | `string` | `""` | Provider API key. Not required for Ollama. |
+| `DefaultModel` | `string?` | `null` | Model used when the request does not specify one. |
+| `Timeout` | `TimeSpan` | `60s` | Per-request HTTP timeout. |
+| `MaxRetries` | `int` | `3` | Maximum retry attempts (`0` disables retries). |
+| `LoggerFactory` | `ILoggerFactory?` | `null` | If provided, LLMConnect emits structured logs. |
 
-**Anthropic** — requires `anthropic-version` (LLMConnect sets this automatically) and uses named SSE events (`content_block_delta`, `message_stop`, etc.) rather than a `[DONE]` sentinel. The stream ends when the connection closes after `message_stop`.
+**Per-provider model fallbacks** (when no model is specified anywhere):
 
-**Google Gemini** — streaming requests automatically append `alt=sse` to the endpoint so the API returns SSE instead of a buffered JSON array. There is no explicit "done" event; instead, the **final** chunk's `candidates[0].finishReason` field (e.g. `STOP`, `MAX_TOKENS`, `SAFETY`) signals completion, and LLMConnect surfaces that onto the final `ChatChunk.FinishReason` / `IsComplete`. The API key is sent via the `x-goog-api-key` header, not embedded in the URL.
+| Provider | Fallback |
+| :--- | :--- |
+| OpenAI / Azure OpenAI | `gpt-3.5-turbo` |
+| Anthropic | `claude-3-5-sonnet-20241022` |
+| Google | `gemini-2.0-flash` |
+| Ollama | `llama3.2` |
 
-**Ollama** — talks to a local server (`http://localhost:11434` by default) and requires no API key. Streaming is NDJSON, not SSE — each line is a complete JSON object, and the final line carries `"done": true`.
+#### LLMConnectClientOptions (additional unified-only fields)
+
+These are duplicated on `LLMConnectEndpointOptions` for the split-options path:
+
+| Property | Type | Description |
+| :--- | :--- | :--- |
+| `AzureResourceName` | `string?` | Azure resource subdomain (e.g. `my-resource` in `my-resource.openai.azure.com`). |
+| `AzureDeploymentName` | `string?` | Azure model deployment name. |
+| `AzureApiVersion` | `string?` | Azure API version query param (e.g. `2024-10-21`). |
+| `OllamaPort` | `int?` | Ollama server port. Defaults to `11434`. |
+
+#### LLMConnectEndpointOptions (split-options path)
+
+| Property | Type | Description |
+| :--- | :--- | :--- |
+| `AzureResourceName` | `string?` | See above. |
+| `AzureDeploymentName` | `string?` | See above. |
+| `AzureApiVersion` | `string?` | See above. |
+| `OllamaPort` | `int?` | See above. |
+| `ExtraOptions` | `Dictionary<string, object>?` | Reserved for future use. |
+
+### Choosing a constructor
+
+```csharp
+// Unified options — library manages its own HttpClient
+new LLMConnectClient(LLMConnectClientOptions options)
+
+// Unified options — you supply the HttpClient
+new LLMConnectClient(LLMConnectClientOptions options, HttpClient httpClient)
+
+// Unified options — you supply an IHttpClientFactory (recommended for ASP.NET Core)
+new LLMConnectClient(LLMConnectClientOptions options, IHttpClientFactory factory)
+
+// Split options — library manages its own HttpClient
+new LLMConnectClient(LLMConnectGeneralOptions generalOpts, LLMConnectEndpointOptions? endpointOpts)
+
+// Split options — you supply the HttpClient
+new LLMConnectClient(LLMConnectGeneralOptions? generalOpts, LLMConnectEndpointOptions? endpointOpts, HttpClient httpClient)
+
+// Split options — you supply an IHttpClientFactory
+new LLMConnectClient(LLMConnectGeneralOptions? generalOpts, LLMConnectEndpointOptions? endpointOpts, IHttpClientFactory factory)
+```
+
+> Retry is only automatically attached when LLMConnect creates the `HttpClient`. If you supply your own, configure retry yourself — LLMConnect will log a warning and will not modify it.
+
+### Provider-specific notes
+
+**OpenAI** — auth via `Authorization: Bearer <key>`. Streaming ends with `data: [DONE]`. Full support for `Seed`, `FrequencyPenalty`, `PresencePenalty`, `ResponseFormat`. Full tool calling and embedding support.
+
+**Azure OpenAI** — auth via `api-key` header. The base URL is constructed internally from `AzureResourceName`, `AzureDeploymentName`, and `AzureApiVersion` — you never write the URL yourself. The request/response wire format is identical to OpenAI; the same provider implementation handles both.
+
+**Anthropic** — auth via `x-api-key`. `anthropic-version: 2023-06-01` set automatically. Uses named SSE events (`content_block_delta`, `message_delta`, `message_stop`); no `[DONE]` sentinel. `FinishReason` comes from `message_delta.delta.stop_reason`. **Embeddings not supported** — `GetEmbeddingAsync` throws `NotSupportedException`.
+
+**Google Gemini** — auth via `x-goog-api-key` (never in the URL). Streaming appends `alt=sse` automatically. `FinishReason` comes from `candidates[0].finishReason` on the final chunk. Tool definitions grouped into `functionDeclarations`; `ToolCall.Id` is set to the function name (Google does not issue separate call IDs).
+
+**Ollama** — targets `http://localhost:{port}/api/`. No auth required. Streaming is NDJSON. Tool calling requires a compatible model (e.g. `llama3.1`, `mistral-nemo`). `ToolCall.Id` is set to the function name.
+
+---
+
+## Azure OpenAI
+
+Azure OpenAI is a first-class provider in LLMConnect — not a workaround via a raw endpoint string. The base URL is constructed internally:
+
+```
+https://{AzureResourceName}.openai.azure.com/openai/deployments/{AzureDeploymentName}/{path}?api-version={AzureApiVersion}
+```
+
+You supply the three named fields; LLMConnect builds the URL and sets the correct `api-key` authentication header. Every other feature — chat, streaming, tool calling, embeddings, retry — works identically to the standard OpenAI provider.
+
+```csharp
+var options = new LLMConnectClientOptions
+{
+    Provider            = ProviderType.AzureOpenAI,
+    ApiKey              = Environment.GetEnvironmentVariable("AZURE_OPENAI_KEY")!,
+    AzureResourceName   = "my-resource",
+    AzureDeploymentName = "gpt-4o-mini-deployment",
+    AzureApiVersion     = "2024-10-21"
+};
+
+using var client = new LLMConnectClient(options);
+
+// Everything else is identical to OpenAI
+var response = await client.ChatAsync(new ChatRequest
+{
+    Messages = [new UserMessage("Hello from Azure!")]
+});
+```
+
+**Validation:** when `Provider = AzureOpenAI`, the options validator enforces that `AzureResourceName`, `AzureDeploymentName`, and `AzureApiVersion` are all non-null and non-empty, and that `ApiKey` is present. A clear exception is thrown at construction time if any are missing.
+
+---
+
+## Embeddings
+
+### Basic usage
+
+```csharp
+var response = await client.GetEmbeddingAsync(new EmbeddingRequest
+{
+    Text = "The quick brown fox jumps over the lazy dog."
+});
+
+float[] vector = response!.Embedding;
+```
+
+If `Model` is not set, `DefaultModel` from options is used. If that is also unset, a per-provider default applies.
+
+### Embeddings provider support matrix
+
+| Feature | OpenAI / Azure | Google | Ollama |
+| :--- | :---: | :---: | :---: |
+| Basic embedding | ✅ | ✅ | ✅ |
+| Custom model | ✅ | ✅ | ✅ |
+| Token usage in response | ✅ | ❌ | ❌ |
+| Dimensions control | ✅ | ❌ | ❌ |
+| Encoding format | ✅ | ❌ | ❌ |
+| Task type | ❌ | ✅ | ❌ |
+| Title | ❌ | ✅ | ❌ |
+| Role | ❌ | ✅ | ❌ |
+| Extra options | ✅ | ✅ | ✅ |
+
+### Per-provider embedding options
+
+**OpenAI / Azure:**
+```csharp
+new EmbeddingRequest
+{
+    Text           = "Hello, world!",
+    Model          = "text-embedding-3-large",
+    Dimensions     = 512,
+    EncodingFormat = "float",
+    User           = "user-abc"
+}
+```
+
+**Google:**
+```csharp
+new EmbeddingRequest
+{
+    Text     = "Document content.",
+    Model    = "text-embedding-004",
+    TaskType = "RETRIEVAL_DOCUMENT",
+    Title    = "My Document",
+    Role     = "user"
+}
+```
+
+**Ollama:**
+```csharp
+new EmbeddingRequest
+{
+    Text  = "Embed this locally.",
+    Model = "nomic-embed-text",
+    ExtraParameters = new Dictionary<string, object> { ["num_ctx"] = 2048 }
+}
+```
+
+---
+
+## Tool calling
+
+### Defining tools
+
+```csharp
+var weatherTool = new Tool
+{
+    Name        = "get_weather",
+    Description = "Returns current temperature and conditions for a city.",
+    Parameters  = new Dictionary<string, JsonSchema>
+    {
+        ["city"] = new JsonSchema
+        {
+            Type        = "string",
+            Description = "The city name."
+        },
+        ["unit"] = new JsonSchema
+        {
+            Type = "string",
+            Enum = new List<object> { "celsius", "fahrenheit" }
+        }
+    },
+    Required = ["city"]
+};
+```
+
+Nested types in `JsonSchema`:
+
+```csharp
+// Object parameter
+["address"] = new JsonSchema
+{
+    Type       = "object",
+    Properties = new Dictionary<string, JsonSchema>
+    {
+        ["street"] = new JsonSchema { Type = "string" },
+        ["city"]   = new JsonSchema { Type = "string" }
+    }
+}
+
+// Array parameter
+["tags"] = new JsonSchema
+{
+    Type  = "array",
+    Items = new JsonSchema { Type = "string" }
+}
+```
+
+### Sending tools in a request
+
+```csharp
+var request = new ChatRequest
+{
+    Messages = [new UserMessage("What is the weather in Bucharest?")],
+    Tools    = [weatherTool]
+};
+
+var response = await client.ChatAsync(request);
+```
+
+### Handling tool call responses
+
+```csharp
+if (response?.ToolCalls?.Count > 0)
+{
+    foreach (var call in response.ToolCalls)
+    {
+        Console.WriteLine($"Tool: {call.Name} (id: {call.Id})");
+
+        foreach (var (param, value) in call.Arguments)
+            Console.WriteLine($"  {param} = {value}");
+    }
+}
+else
+{
+    Console.WriteLine(response?.Content);
+}
+```
+
+### Returning tool results
+
+```csharp
+var response = await client.ChatAsync(request);
+var toolCall = response!.ToolCalls![0];
+
+// Execute the tool in your application
+var result = await GetWeatherAsync(toolCall.Arguments["city"].ToString()!);
+
+// Return the result to the model
+var followUp = new ChatRequest
+{
+    Messages =
+    [
+        new UserMessage("What is the weather in Bucharest?"),
+        new AssistantMessage(response.Content ?? string.Empty),
+        new ToolMessage(toolCallId: toolCall.Id, content: result)
+    ],
+    Tools = [weatherTool]
+};
+
+var finalResponse = await client.ChatAsync(followUp);
+Console.WriteLine(finalResponse?.Content);
+```
+
+### Tool choice
+
+| Value | Behaviour |
+| :--- | :--- |
+| `null` | Provider default (usually `"auto"`) |
+| `"auto"` | Model decides whether to call a tool |
+| `"required"` | Model must call at least one tool |
+| `"none"` | Model must not call any tools |
+| A tool name | Model must call that specific tool |
+
+```csharp
+var request = new ChatRequest
+{
+    Messages   = [new UserMessage("Get the weather for Bucharest.")],
+    Tools      = [weatherTool],
+    ToolChoice = "required"
+};
+```
+
+### Tool calling provider support matrix
+
+| Feature | OpenAI / Azure | Anthropic | Google | Ollama |
+| :--- | :---: | :---: | :---: | :---: |
+| Basic tool calling | ✅ | ✅ | ✅ | ✅ |
+| Multiple tools | ✅ | ✅ | ✅ | ✅ |
+| `"auto"` | ✅ | ✅ | ✅ | ✅ |
+| `"required"` | ✅ | ✅ | ✅ (→ `ANY`) | ✅ |
+| `"none"` | ✅ | ✅ | ✅ | ✅ |
+| Named tool | ✅ | ✅ | ✅ | ✅ |
+| Parallel calls | ✅ | ✅ | ❌ | model-dependent |
+
+### Tool calling provider-specific notes
+
+**OpenAI / Azure** — tool calls in `message.tool_calls`. `ToolChoice` of a specific name sends `{ "type": "function", "function": { "name": "..." } }`. `ToolCall.Id` is OpenAI's call ID and must be echoed back in `ToolMessage`.
+
+**Anthropic** — tools sent as top-level `tools`. Responses as `tool_use` content blocks. `ToolCall.Id` is Anthropic's `tool_use` ID and must be echoed back in `ToolMessage`.
+
+**Google** — tools grouped into `tools[0].functionDeclarations`. `"required"` maps to `ANY` in `functionCallingConfig.mode`; a specific tool name maps to `ANY` with `allowedFunctionNames`. `ToolCall.Id` is the function name (Google does not issue separate call IDs).
+
+**Ollama** — `ToolCall.Id` is the function name. Works only with models that support tool calling; verify your model before deploying.
+
+---
+
+## Streaming tool calls
+
+`StreamAsync` surfaces tool call deltas alongside text deltas. Accumulate `ArgumentsDelta` across chunks with the same `Index`:
+
+```csharp
+var toolArgBuffers = new Dictionary<int, StringBuilder>();
+var toolCallMeta   = new Dictionary<int, (string Id, string Name)>();
+
+await foreach (var chunk in client.StreamAsync(request))
+{
+    // Handle text content
+    if (!string.IsNullOrEmpty(chunk.Content))
+        Console.Write(chunk.Content);
+
+    // Accumulate tool call argument fragments
+    if (chunk.ToolCalls != null)
+    {
+        foreach (var delta in chunk.ToolCalls)
+        {
+            if (!toolArgBuffers.ContainsKey(delta.Index))
+            {
+                toolArgBuffers[delta.Index] = new StringBuilder();
+                toolCallMeta[delta.Index]   = (delta.Id ?? "", delta.Name ?? "");
+            }
+
+            toolArgBuffers[delta.Index].Append(delta.ArgumentsDelta);
+        }
+    }
+
+    // When stream ends, deserialize accumulated arguments
+    if (chunk.IsComplete && toolArgBuffers.Count > 0)
+    {
+        foreach (var (index, buffer) in toolArgBuffers)
+        {
+            var (id, name) = toolCallMeta[index];
+            var args = JsonSerializer.Deserialize<Dictionary<string, object>>(buffer.ToString());
+            Console.WriteLine($"\nTool call: {name} (id: {id}), args: {buffer}");
+        }
+    }
+}
+```
 
 ---
 
 ## Dependency injection
 
-LLMConnect integrates with `Microsoft.Extensions.DependencyInjection` via `AddLLMConnect`:
+Two `AddLLMConnect` overloads are available.
+
+### Unified options
 
 ```csharp
 using LLMConnect.Configuration;
 
 builder.Services.AddLLMConnect(options =>
 {
-    options.Provider = ProviderType.OpenAI;
-    options.ApiKey = builder.Configuration["OpenAI:ApiKey"]!;
+    options.Provider     = ProviderType.OpenAI;
+    options.ApiKey       = builder.Configuration["OpenAI:ApiKey"]!;
     options.DefaultModel = "gpt-4o-mini";
-    options.MaxRetries = 3;
+    options.MaxRetries   = 3;
 });
 ```
 
----
-## Ollama Default & Custom Port
+### Split options
 
 ```csharp
-// Ollama Default Port
-var options = new LLMConnectClientOptions
-{
-    Provider = ProviderType.Ollama,
-    // No ApiKey required
-    DefaultModel = "llama3.2"
-};
-
-//Ollama Custom Port
-var options = new LLMConnectClientOptions
-{
-    Provider = ProviderType.Ollama,
-    OllamaPort = 11435,
-    DefaultModel = "gemma:2b"
-};
-
+builder.Services.AddLLMConnect(
+    configureGeneral: general =>
+    {
+        general.Provider     = ProviderType.AzureOpenAI;
+        general.ApiKey       = builder.Configuration["Azure:ApiKey"]!;
+        general.DefaultModel = "gpt-4o-mini";
+    },
+    configureEndpoint: endpoint =>
+    {
+        endpoint.AzureResourceName   = builder.Configuration["Azure:ResourceName"];
+        endpoint.AzureDeploymentName = builder.Configuration["Azure:DeploymentName"];
+        endpoint.AzureApiVersion     = builder.Configuration["Azure:ApiVersion"];
+    }
+);
 ```
 
----
-
-## Azure OpenAI
-
-```csharp
-// Azure OpenAI
-var options = new LLMConnectClientOptions
-{
-    Provider = ProviderType.OpenAI,
-    ApiKey = "your-azure-key",
-    Endpoint = "https://my-azure.openai.azure.com/openai/deployments/gpt-4/chat/completions?api-version=2024-02-15-preview",
-    DefaultModel = "gpt-4"
-};
-```
-
----
-## With Logging
-
-```csharp
-var loggerFactory = LoggerFactory.Create(builder =>
-{
-    builder.AddConsole();
-    builder.SetMinimumLevel(LogLevel.Information);
-});
-
-var options = new LLMConnectClientOptions
-{
-    Provider = ProviderType.OpenAI,
-    ApiKey = "sk-...",
-    LoggerFactory = loggerFactory
-};
-```
-
----
-
-## DI
-
-```csharp
-builder.Services.AddLLMConnect(options =>
-{
-    options.Provider = ProviderType.OpenAI;
-    options.ApiKey = builder.Configuration["OpenAI:ApiKey"];
-    options.DefaultModel = "gpt-4";
-    options.Timeout = TimeSpan.FromSeconds(30);
-});
-```
-
----
-
-
-This registers:
-
-- A named `HttpClient` (`"LLMConnect"`) configured with connection pooling (`SocketsHttpHandler.PooledConnectionLifetime = 5 minutes`, mitigating DNS‑staleness issues with long‑lived clients) and LLMConnect's retry handler.
-- `ILLMConnectClient` as a singleton, resolved through `IHttpClientFactory` under the hood.
-
-Inject and use it like any other service:
+Both register a named `HttpClient` (`"LLMConnect"`) with connection pooling and the retry handler, and `ILLMConnectClient` as a singleton.
 
 ```csharp
 public class MyService(ILLMConnectClient client)
 {
     public Task<ChatResponse?> AskAsync(string question) =>
-        client.ChatAsync(new ChatRequest
-        {
-            Messages = [new UserMessage(question)]
-        });
+        client.ChatAsync(new ChatRequest { Messages = [new UserMessage(question)] });
+
+    public Task<EmbeddingResponse?> EmbedAsync(string text) =>
+        client.GetEmbeddingAsync(new EmbeddingRequest { Text = text });
 }
 ```
 
@@ -605,55 +888,30 @@ public class MyService(ILLMConnectClient client)
 
 ## Retry behavior
 
-LLMConnect retries requests that fail with:
+Retried on:
 
 - HTTP `429 Too Many Requests`
 - HTTP `5xx` server errors
-- `HttpRequestException` (network‑level failures, e.g. connection reset, DNS failure)
+- `HttpRequestException` (network-level failures)
 
-Retries use exponential backoff with jitter (powered by Polly's `ResiliencePipeline`), up to `MaxRetries` attempts (default `3`, configurable, `0` disables retries entirely). If a `LoggerFactory` is configured, each retry attempt is logged at `Warning` level with the attempt number, delay, and failure reason.
+Uses exponential backoff with jitter via Polly, up to `MaxRetries` attempts. Each retry is logged at `Warning` when a `LoggerFactory` is configured.
 
-**Things to be aware of:**
+**Known caveats:**
 
-- Retries are **not** currently aware of the `Retry-After` header some providers return on `429` responses; backoff is always computed locally rather than honoring the provider's suggested wait time.
-- A retried request that failed due to a timeout (rather than a clear error response) may have already been processed server‑side by the provider before the client gave up waiting. LLMConnect does not currently send idempotency keys, so a timeout‑triggered retry can, in rare cases, result in the provider billing for more than one completion for what is logically a single call. If this matters for your use case, consider setting a generous `Timeout` and a conservative `MaxRetries`.
-- Retry behavior is only attached automatically when LLMConnect owns the `HttpClient` (constructors 1 and 3 above, and the DI registration). If you supply your own `HttpClient`, you must configure retry/resilience yourself.
-
----
-
-## Streaming
-
-`StreamAsync` returns `IAsyncEnumerable<ChatChunk>` and can be consumed with `await foreach`:
-
-```csharp
-var sb = new StringBuilder();
-
-await foreach (var chunk in client.StreamAsync(request, cancellationToken))
-{
-    sb.Append(chunk.Content);
-}
-```
-
-Internally, streaming is implemented as two small, provider‑independent layers:
-
-- An **event reader** that understands the wire protocol (SSE for OpenAI/Anthropic/Google, NDJSON for Ollama) and yields raw `(EventName, Data)` pairs.
-- A **chunk parser**, one per provider, that turns a raw event into a `ChatChunk` (or discards it, for non‑content events like SSE comments or Anthropic's non‑delta events).
-
-This means parsing the wire protocol itself is implemented once per protocol, not once per provider — and you don't need to know any of this to use the library; it's mentioned here for anyone extending LLMConnect with a new provider.
-
-Cancellation is supported throughout: pass a `CancellationToken` to `StreamAsync`, and the underlying read loop will stop cleanly when it's triggered.
+- `Retry-After` headers are not currently honored; backoff is always computed locally.
+- A timeout-triggered retry may result in the provider billing for the same call twice, as LLMConnect does not send idempotency keys.
+- Retry is only automatically attached when LLMConnect owns the `HttpClient`.
 
 ---
 
 ## Error handling
 
-All provider errors are surfaced as `LLMConnectException`:
+All provider errors surface as `LLMConnectException`:
 
 ```csharp
 public class LLMConnectException : Exception
 {
     public string? Provider { get; set; }
-    // + standard Exception constructors, with/without Provider and InnerException
 }
 ```
 
@@ -664,38 +922,44 @@ try
 }
 catch (LLMConnectException ex)
 {
-    Console.WriteLine($"[{ex.Provider}] request failed: {ex.Message}");
+    Console.WriteLine($"[{ex.Provider}] {ex.Message}");
+}
+catch (NotSupportedException ex)
+{
+    // Thrown by GetEmbeddingAsync when Provider = Anthropic
+    Console.WriteLine(ex.Message);
 }
 ```
 
-LLMConnect attempts to extract a human‑readable message from the provider's JSON error body (e.g. OpenAI/Anthropic's `error.message`, Google's `error.message`). If the response body isn't valid JSON (e.g. an HTML error page from a proxy, or an empty body), LLMConnect falls back to a message containing the raw HTTP status code and body text rather than throwing an unrelated JSON parsing exception.
+LLMConnect extracts a human-readable message from the provider's JSON error body. If the body is not valid JSON (e.g. an HTML error page from a proxy), it falls back to the HTTP status code and raw body text rather than throwing a `JsonException`.
 
 ---
 
 ## Known limitations
 
-LLMConnect is under active development. Current known gaps:
-
-- **No function/tool calling support yet.** `ToolMessage` exists for representing tool results in conversation history, but there is no way to declare available tools/functions on a `ChatRequest` or receive a structured tool‑call request back from the model. Planned for a future release.
-- **No embeddings API.** Only chat completions are supported.
-- **`Retry-After` is not honored** on `429` responses — see [Retry behavior](#retry-behavior).
-- **Streaming finish‑reason fidelity varies by provider** — see the [provider‑specific notes](#provider-specific-notes) for what each provider actually signals on stream completion.
-
-If you hit a gap not listed here, please open an issue.
+- **No batch embedding support.** `EmbeddingRequest.Text` accepts a single string.
+- **Anthropic does not support embeddings.** `GetEmbeddingAsync` throws `NotSupportedException` for the Anthropic provider.
+- **`Retry-After` not honored** on `429` responses.
+- **Ollama tool calling is model-dependent.** Not all Ollama models support tool calling.
+- **`FinishReason` varies by provider.** See the provider-specific notes for what each provider signals on stream completion.
 
 ---
 
 ## Roadmap
 
 ### Now
-- Chat completions (non‑streaming and streaming) across OpenAI, Anthropic, Google, and Ollama
-- Consistent request/response models
-- Retry with backoff and jitter, DI support
+- Chat completions (non-streaming and streaming) — OpenAI, Azure OpenAI, Anthropic, Google, Ollama
+- Vector embeddings — OpenAI, Azure OpenAI, Google, Ollama
+- Tool/function calling with streaming deltas — all five providers
+- Azure OpenAI as a first-class provider
+- Split configuration (`LLMConnectGeneralOptions` + `LLMConnectEndpointOptions`)
+- Retry with exponential backoff and jitter
+- DI support with two registration overloads
 
 ### Next
-- Honor `Retry-After` on rate‑limit responses
-- Tool/function calling support
-- Embeddings API
+- Honor `Retry-After` on rate-limit responses
+- Batch embedding support
+- Per-request provider selection
 
 ### Later
 - `Microsoft.Extensions.AI` integration
@@ -705,7 +969,7 @@ If you hit a gap not listed here, please open an issue.
 
 ## Contributing
 
-Contributions are welcome. Please open an issue to discuss significant changes before submitting a pull request, and include tests for new behavior — the project has an xUnit test suite (`LLMConnect.Tests`) covering providers, streaming, retry behavior, and configuration validation, including WireMock‑based integration tests that simulate all four providers without making real network calls.
+Please open an issue before submitting a pull request for significant changes. The test suite (`LLMConnect.Tests`) uses xUnit and WireMock for provider integration tests that run without real network calls.
 
 ```bash
 git clone https://github.com/bargross/llm-connect.git
@@ -717,4 +981,4 @@ dotnet test
 
 ## License
 
-This project is licensed under the Apache License, Version 2.0. See the [LICENSE](./LICENSE) file for details.
+Apache License, Version 2.0. See [LICENSE](./LICENSE) for details.

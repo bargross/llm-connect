@@ -5,7 +5,7 @@ namespace LLMConnect;
 internal class OllamaChatRequest
 {
     [JsonPropertyName("model")]
-    public string Model { get; set; } = string.Empty;
+    public string? Model { get; set; } = string.Empty;
 
     [JsonPropertyName("messages")]
     public List<OllamaMessage> Messages { get; set; } = new();
@@ -15,4 +15,10 @@ internal class OllamaChatRequest
 
     [JsonPropertyName("options")]
     public OllamaOptions? Options { get; set; }
+
+    [JsonPropertyName("tools")]
+    public List<OllamaTool>? Tools { get; set; }
+
+    [JsonPropertyName("tool_choice")]
+    public string? ToolChoice { get; set; }
 }

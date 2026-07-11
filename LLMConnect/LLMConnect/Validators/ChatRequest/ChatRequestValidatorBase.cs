@@ -1,8 +1,9 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using LLMConnect.Models;
+using Microsoft.Extensions.Logging;
 
 namespace LLMConnect;
 
-internal abstract class ChatRequestValidatorBase
+internal abstract class ChatRequestValidatorBase: IChatRequestValidator
 {
     public void Validate(ChatRequest request, ILogger? logger)
     {
@@ -36,6 +37,35 @@ internal abstract class ChatRequestValidatorBase
             logger?.LogError("StopSequences cannot contain empty or whitespace strings.");
             
             throw new ArgumentException("StopSequences cannot contain empty or whitespace strings.", nameof(request.StopSequences));
+        }
+
+        if (request.Tools != null && request.Tools.Count > 0)
+        {
+            foreach (var tool in request.Tools)
+            {
+                if (string.IsNullOrWhiteSpace(tool.Name))
+                    throw new ArgumentException("Tool name cannot be empty.", nameof(request.Tools));
+
+                if (string.IsNullOrWhiteSpace(tool.Description))
+                    throw new ArgumentException($"Tool '{tool.Name}' must have a description.", nameof(request.Tools));
+
+                // Validate parameters
+                if (tool.Parameters == null || !tool.Parameters.Any())
+                    throw new ArgumentException($"Tool '{tool.Name}' must define parameters.", nameof(request.Tools));
+
+                var toolParameters = tool.Parameters.ToList();
+                for (var index = 0; index < toolParameters.Count; index++)
+                {
+                    var paramKvp = toolParameters[index];
+                    if (string.IsNullOrWhiteSpace(paramKvp.Value.Type))
+                        throw new ArgumentException($"Tool '{tool.Name}' parameter '{paramKvp.Key}' -> value, must have a type.", nameof(request.Tools));
+                
+
+                    // Optional: additional checks for "object" type requiring Properties, etc.
+                    // We can add more validation as needed.
+                }
+            }
+
         }
 
         // Provider-specific validation
