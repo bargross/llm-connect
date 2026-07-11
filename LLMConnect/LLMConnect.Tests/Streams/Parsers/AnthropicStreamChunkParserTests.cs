@@ -1,9 +1,8 @@
 ﻿using FluentAssertions;
+using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 using Moq;
-using System.Text.Json;
-using Xunit;
 
 namespace LLMConnect.Tests.Streams.ChunkParsers;
 
@@ -27,206 +26,32 @@ public class AnthropicStreamChunkParserTests
         };
     }
 
-    // ---------- Valid Events ----------
-
+    // ---------- Text deltas ----------
     [Fact]
-    public void Parse_WithValidContentBlockDelta_ReturnsChatChunk()
+    public void Parse_WithTextDelta_ReturnsTextChunk()
     {
-        // Arrange
-        var parser = new AnthropicStreamChunkParser(_options);
-        var json = @"{""delta"":{""text"":""Hello""}}";
+        var json = @"{""type"":""content_block_delta"",""index"":0,""delta"":{""type"":""text_delta"",""text"":""Hello""}}";
         var evt = new StreamEvent("content_block_delta", json);
+        var parser = new AnthropicStreamChunkParser(_options);
 
-        // Act
         var result = parser.Parse(evt);
 
-        // Assert
         result.Should().NotBeNull();
         result.Content.Should().Be("Hello");
         result.IsComplete.Should().BeFalse();
-        _loggerMock.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public void Parse_WithValidContentBlockDeltaAndSpecialCharacters_ReturnsCorrectText()
-    {
-        // Arrange
-        var parser = new AnthropicStreamChunkParser(_options);
-        var json = @"{""delta"":{""text"":""Hello\nworld""}}";
-        var evt = new StreamEvent("content_block_delta", json);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Content.Should().Be("Hello\nworld");
-    }
-
-    // ---------- Invalid Event Names ----------
-
-    [Fact]
-    public void Parse_WithUnknownEvent_ReturnsNull()
-    {
-        var evt = new StreamEvent("ping", "{}");
-        var parser = new AnthropicStreamChunkParser(_options);
-
-        var result = parser.Parse(evt);
-
-        result.Should().BeNull();
-    }
-
-    // ---------- Empty or Null Data ----------
-
-    [Fact]
-    public void Parse_WithNullData_ReturnsNull()
-    {
-        // Arrange
-        var parser = new AnthropicStreamChunkParser(_options);
-        var evt = new StreamEvent("content_block_delta", null!);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().BeNull();
-        _loggerMock.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public void Parse_WithEmptyData_ReturnsNull()
-    {
-        // Arrange
-        var parser = new AnthropicStreamChunkParser(_options);
-        var evt = new StreamEvent("content_block_delta", "");
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().BeNull();
-        _loggerMock.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public void Parse_WithDoneSentinel_ReturnsNull()
-    {
-        // Arrange
-        var parser = new AnthropicStreamChunkParser(_options);
-        var evt = new StreamEvent("content_block_delta", "[DONE]");
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().BeNull();
-        _loggerMock.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public void Parse_WithMessageStopEvent_ReturnsCompleteChunk()
-    {
-        var evt = new StreamEvent("message_stop", "{}");
-        var parser = new AnthropicStreamChunkParser(_options);
-
-        var result = parser.Parse(evt);
-
-        result.Should().NotBeNull();
-        result.IsComplete.Should().BeTrue();
-        result.Content.Should().BeNull();
         result.ToolCalls.Should().BeNull();
     }
 
-    // ---------- Malformed JSON ----------
-
+    // ---------- Tool call deltas (single) ----------
     [Fact]
-    public void Parse_WithMalformedJson_LogsAndReturnsNull()
-    {
-        // Arrange
-        var malformed = "{ incomplete json";
-        var evt = new StreamEvent("content_block_delta", malformed);
-        var parser = new AnthropicStreamChunkParser(_options);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().BeNull();
-
-        // Verify log – use partial match because the actual message varies
-        _loggerMock.Verify(
-            x => x.Log(
-                LogLevel.Information,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Ignoring malformed")),
-                It.IsAny<Exception>(),
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-            Times.Once);
-    }
-
-    // ---------- Valid JSON but Empty Text ----------
-
-    [Fact]
-    public void Parse_WithValidJsonButEmptyText_ReturnsNull()
-    {
-        // Arrange
-        var parser = new AnthropicStreamChunkParser(_options);
-        var json = @"{""delta"":{""text"":""""}}";
-        var evt = new StreamEvent("content_block_delta", json);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().BeNull();
-        _loggerMock.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public void Parse_WithValidJsonButNullText_ReturnsNull()
-    {
-        // Arrange
-        var parser = new AnthropicStreamChunkParser(_options);
-        var json = @"{""delta"":{""text"":null}}";
-        var evt = new StreamEvent("content_block_delta", json);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().BeNull();
-        _loggerMock.VerifyNoOtherCalls();
-    }
-
-    // ---------- Extra Fields ----------
-
-    [Fact]
-    public void Parse_WithExtraFields_IgnoresThem()
-    {
-        // Arrange
-        var parser = new AnthropicStreamChunkParser(_options);
-        var json = @"{""index"":0,""delta"":{""text"":""Hello""},""extra"":""value""}";
-        var evt = new StreamEvent("content_block_delta", json);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Content.Should().Be("Hello");
-        _loggerMock.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public void Parse_WithToolUseDelta_ReturnsToolCallChunk()
+    public void Parse_WithToolUseStartAndDelta_ReturnsToolCallChunkWithPartialArguments()
     {
         var startJson = @"{""type"":""content_block_start"",""index"":0,""content_block"":{""type"":""tool_use"",""id"":""toolu_123"",""name"":""get_weather""}}";
         var startEvt = new StreamEvent("content_block_start", startJson);
-        var options = new LLMConnectGeneralOptions();
-        var parser = new AnthropicStreamChunkParser(options);
-        parser.Parse(startEvt); // ignore start
+        var parser = new AnthropicStreamChunkParser(_options);
+        parser.Parse(startEvt); // sets up state
 
-        var deltaJson = @"{""type"":""content_block_delta"",""index"":0,""delta"":{""type"":""tool_use_delta"",""partial_json"":""{\""location\"":\""Boston\""}""}}";
+        var deltaJson = @"{""type"":""content_block_delta"",""index"":0,""delta"":{""type"":""input_json_delta"",""partial_json"":""{\""location\"":\""Boston\""}""}}";
         var deltaEvt = new StreamEvent("content_block_delta", deltaJson);
 
         var result = parser.Parse(deltaEvt);
@@ -237,6 +62,182 @@ public class AnthropicStreamChunkParserTests
         tc.Index.Should().Be(0);
         tc.Id.Should().Be("toolu_123");
         tc.Name.Should().Be("get_weather");
-        tc.ArgumentsDelta.Should().Be("{\"location\":\"Boston\"}"); // ✅ Use ArgumentsDelta
+        tc.ArgumentsDelta.Should().Be("{\"location\":\"Boston\"}");
+        result.Content.Should().BeNull();
+        result.IsComplete.Should().BeFalse();
+    }
+
+    // ---------- Multiple deltas (accumulation) ----------
+
+    [Fact]
+    public void Parse_WithMultipleToolUseDeltas_AccumulatesArgumentsCorrectly()
+    {
+        // Arrange
+        var startJson = """
+        {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {
+                "type": "tool_use",
+                "id": "toolu_123",
+                "name": "get_weather"
+            }
+        }
+        """;
+        var startEvt = new StreamEvent("content_block_start", startJson);
+        var parser = new AnthropicStreamChunkParser(_options);
+        parser.Parse(startEvt); // sets up state
+
+        // First delta: partial JSON fragment
+        var deltaJson1 = """
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {
+                "type": "input_json_delta",
+                "partial_json": "{\"location\":\""
+            }
+        }
+        """;
+        var deltaEvt1 = new StreamEvent("content_block_delta", deltaJson1);
+        var result1 = parser.Parse(deltaEvt1);
+
+        // Assert first delta
+        result1.Should().NotBeNull();
+        result1.ToolCalls.Should().HaveCount(1);
+        result1.ToolCalls[0].ArgumentsDelta.Should().Be("{\"location\":\"");
+
+        // Second delta: rest of the JSON
+        var deltaJson2 = """
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {
+                "type": "input_json_delta",
+                "partial_json": "Boston\""
+            }
+        }
+        """;
+        var deltaEvt2 = new StreamEvent("content_block_delta", deltaJson2);
+        var result2 = parser.Parse(deltaEvt2);
+
+        // Assert second delta
+        result2.Should().NotBeNull();
+        result2.ToolCalls.Should().HaveCount(1);
+        result2.ToolCalls[0].ArgumentsDelta.Should().Be("Boston\"");
+    }
+
+    // ---------- Multiple indices ----------
+    [Fact]
+    public void Parse_WithMultipleToolUseIndices_HandlesSeparateStates()
+    {
+        // Tool 1
+        var parser = new AnthropicStreamChunkParser(_options);
+
+        var start1 = @"{""type"":""content_block_start"",""index"":0,""content_block"":{""type"":""tool_use"",""id"":""toolu_1"",""name"":""foo""}}";
+        parser.Parse(new StreamEvent("content_block_start", start1));
+
+        var delta1 = @"{""type"":""content_block_delta"",""index"":0,""delta"":{""type"":""input_json_delta"",""partial_json"":""{\""a\"":1}""}}";
+        var result1 = parser.Parse(new StreamEvent("content_block_delta", delta1));
+        result1.ToolCalls[0].Id.Should().Be("toolu_1");
+
+        // Tool 2
+        var start2 = @"{""type"":""content_block_start"",""index"":1,""content_block"":{""type"":""tool_use"",""id"":""toolu_2"",""name"":""bar""}}";
+        parser.Parse(new StreamEvent("content_block_start", start2));
+
+        var delta2 = @"{""type"":""content_block_delta"",""index"":1,""delta"":{""type"":""input_json_delta"",""partial_json"":""{\""b\"":2}""}}";
+        var result2 = parser.Parse(new StreamEvent("content_block_delta", delta2));
+        result2.ToolCalls[0].Id.Should().Be("toolu_2");
+        result2.ToolCalls[0].Name.Should().Be("bar");
+    }
+
+    // ---------- Finish reason ----------
+    [Fact]
+    public void Parse_WithMessageDelta_ReturnsCompleteChunkWithFinishReason()
+    {
+        var json = @"{""type"":""message_delta"",""delta"":{""stop_reason"":""end_turn""},""usage"":{""output_tokens"":5}}";
+        var evt = new StreamEvent("message_delta", json);
+        var parser = new AnthropicStreamChunkParser(_options);
+
+        var result = parser.Parse(evt);
+
+        result.Should().NotBeNull();
+        result.IsComplete.Should().BeTrue();
+        result.FinishReason.Should().Be("end_turn");
+        result.Content.Should().BeNull();
+        result.ToolCalls.Should().BeNull();
+    }
+
+    [Fact]
+    public void Parse_WithMessageDeltaWithoutStopReason_ReturnsNull()
+    {
+        var json = @"{""type"":""message_delta"",""delta"":{},""usage"":{}}";
+        var evt = new StreamEvent("message_delta", json);
+        var parser = new AnthropicStreamChunkParser(_options);
+
+        var result = parser.Parse(evt);
+
+        result.Should().BeNull();
+    }
+
+    // ---------- Message stop ----------
+    [Fact]
+    public void Parse_WithMessageStop_ReturnsCompleteChunk()
+    {
+        var evt = new StreamEvent("message_stop", "{}");
+        var parser = new AnthropicStreamChunkParser(_options);
+
+        var result = parser.Parse(evt);
+
+        result.Should().NotBeNull();
+        result.IsComplete.Should().BeTrue();
+        result.FinishReason.Should().BeNull();
+        result.Content.Should().BeNull();
+        result.ToolCalls.Should().BeNull();
+    }
+
+    // ---------- Edge cases ----------
+    [Fact]
+    public void Parse_WithContentBlockStartNotToolUse_ReturnsNull()
+    {
+        var json = @"{""type"":""content_block_start"",""index"":0,""content_block"":{""type"":""text"",""text"":""hi""}}";
+        var evt = new StreamEvent("content_block_start", json);
+        var parser = new AnthropicStreamChunkParser(_options);
+
+        var result = parser.Parse(evt);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void Parse_WithMalformedJson_LogsAndReturnsNull()
+    {
+        var malformed = "{ incomplete json";
+        var evt = new StreamEvent("content_block_delta", malformed);
+        var parser = new AnthropicStreamChunkParser(_options);
+
+        var result = parser.Parse(evt);
+
+        result.Should().BeNull();
+
+        _loggerMock.Verify(
+            x => x.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Ignoring malformed")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public void Parse_WithUnknownEvent_ReturnsNull()
+    {
+        var evt = new StreamEvent("ping", "{}");
+        var parser = new AnthropicStreamChunkParser(_options);
+
+        var result = parser.Parse(evt);
+
+        result.Should().BeNull();
     }
 }

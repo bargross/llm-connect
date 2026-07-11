@@ -25,6 +25,7 @@ internal class AnthropicStreamChunkParser : ChunkParserBase<AnthropicStreamChunk
                 if (start?.ContentBlock?.Type == "tool_use")
                 {
                     var index = start.Index ?? 0;
+
                     _toolCallStates[index] = new AnthropicToolCallState
                     {
                         Id = start.ContentBlock.Id,
@@ -35,25 +36,29 @@ internal class AnthropicStreamChunkParser : ChunkParserBase<AnthropicStreamChunk
                 return null;
             }
 
-            // content_block_delta (text or tool_use_delta)
+            // content_block_delta (text or input_json_delta)
             if (evt.EventName == "content_block_delta")
             {
                 var delta = JsonSerializer.Deserialize<AnthropicContentBlockDelta>(evt.Data);
-                if (delta?.Delta?.Type == "tool_use_delta")
+                if (delta?.Delta?.Type == "input_json_delta")
                 {
-                    if (_toolCallStates.TryGetValue(delta.Index, out var state))
+                    var index = delta.Index;
+                    if (_toolCallStates.TryGetValue(index, out var state))
                     {
-                        state.AccumulatedArguments += delta.Delta.PartialJson ?? string.Empty;
+                        var partial = delta.Delta.PartialJson ?? string.Empty;
+                        state.AccumulatedArguments += partial;
+
+                        // Send only the new partial fragment (not the accumulated)
                         return new ChatChunk
                         {
                             ToolCalls = new List<ToolCallDelta>
                             {
                                 new ToolCallDelta
                                 {
-                                    Index = delta.Index,
+                                    Index = index,
                                     Id = state.Id,
                                     Name = state.Name,
-                                    ArgumentsDelta = state.AccumulatedArguments
+                                    ArgumentsDelta = partial
                                 }
                             }
                         };
@@ -66,7 +71,22 @@ internal class AnthropicStreamChunkParser : ChunkParserBase<AnthropicStreamChunk
                 return null;
             }
 
-            // message_stop
+            // message_delta (carries stop_reason and usage)
+            if (evt.EventName == "message_delta")
+            {
+                var delta = JsonSerializer.Deserialize<AnthropicMessageDelta>(evt.Data);
+                if (delta?.Delta?.StopReason != null)
+                {
+                    return new ChatChunk
+                    {
+                        IsComplete = true,
+                        FinishReason = delta.Delta.StopReason
+                    };
+                }
+                return null;
+            }
+
+            // message_stop (end of stream)
             if (evt.EventName == "message_stop")
             {
                 _toolCallStates.Clear();
@@ -80,12 +100,5 @@ internal class AnthropicStreamChunkParser : ChunkParserBase<AnthropicStreamChunk
             _logger?.LogInformation($"Ignoring malformed chunk, reason: {ex.Message}");
             return null;
         }
-    }
-
-    private class AnthropicToolCallState
-    {
-        public string? Id { get; set; }
-        public string? Name { get; set; }
-        public string AccumulatedArguments { get; set; } = string.Empty;
     }
 }

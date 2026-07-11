@@ -22,7 +22,7 @@ public class LLMConnectEndpointOptions
 
     /// <summary>
     /// The port a local Ollama server is listening on. Defaults to <c>11434</c>
-    /// if not set. Ignored if <see cref="Endpoint"/> is set.
+    /// if not set, default is applied.
     /// </summary>
     public int? OllamaPort { get; set; }
 

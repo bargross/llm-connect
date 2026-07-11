@@ -34,14 +34,14 @@ public class LLMProviderFactoryTests
     public void Constructor_WithHttpClient_WhenGeneralOptionsNull_ThrowsArgumentNullException()
     {
         var act = () => new LLMProviderFactory(null, _validEndpointOptions, new HttpClient());
-        act.Should().Throw<ArgumentNullException>().WithParameterName("generalOpts");
+        act.Should().Throw<ArgumentNullException>().WithParameterName("generalOptions");
     }
 
     [Fact]
     public void Constructor_WithHttpClient_WhenEndpointOptionsNull_ThrowsArgumentNullException()
     {
         var act = () => new LLMProviderFactory(_validGeneralOptions, null, new HttpClient());
-        act.Should().Throw<ArgumentNullException>().WithParameterName("endpointOpts");
+        act.Should().Throw<ArgumentNullException>().WithParameterName("endpointOptions");
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public class LLMProviderFactoryTests
     {
         var factoryMock = new Mock<IHttpClientFactory>();
         var act = () => new LLMProviderFactory(null, _validEndpointOptions, factoryMock.Object);
-        act.Should().Throw<ArgumentNullException>().WithParameterName("generalOpts");
+        act.Should().Throw<ArgumentNullException>().WithParameterName("generalOptions");
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public class LLMProviderFactoryTests
     {
         var factoryMock = new Mock<IHttpClientFactory>();
         var act = () => new LLMProviderFactory(_validGeneralOptions, null, factoryMock.Object);
-        act.Should().Throw<ArgumentNullException>().WithParameterName("endpointOpts");
+        act.Should().Throw<ArgumentNullException>().WithParameterName("endpointOptions");
     }
 
     [Fact]

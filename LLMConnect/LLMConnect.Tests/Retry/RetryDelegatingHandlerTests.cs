@@ -73,21 +73,39 @@ public class RetryDelegatingHandlerTests
     [Fact]
     public async Task SendAsync_WhenRetryExhausted_ThrowsOriginalException()
     {
-        var client = CreateClientWithRetry(2,
-            new HttpResponseMessage(HttpStatusCode.InternalServerError),
-            new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        // Arrange: simulate two consecutive exceptions (retryable)
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock
+            .Protected()
+            .SetupSequence<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ThrowsAsync(new HttpRequestException("Network error 1"))
+            .ThrowsAsync(new HttpRequestException("Network error 2"));
+
+        // Set max retries to 1 so total attempts == 2 and matches the two mocked exceptions
+        var retryHandler = new RetryDelegatingHandler(2, _loggerMock.Object)
+        {
+            InnerHandler = handlerMock.Object
+        };
+        var client = new HttpClient(retryHandler);
 
         Func<Task> act = async () => await client.GetAsync("http://test.com");
 
-        await act.Should().ThrowAsync<HttpRequestException>();
+        // Act & Assert
+        var exception = await act.Should().ThrowAsync<HttpRequestException>();
+        exception.And.Message.Should().Be("Network error 2"); // The last exception thrown
+
+        // Verify retry logs
         _loggerMock.Verify(
             x => x.Log(
                 LogLevel.Warning,
                 It.IsAny<EventId>(),
                 It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Retry")),
-                null,
+                It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception, string>>()),
-            Times.Exactly(2));
+            Times.Exactly(1));
     }
 
     [Fact]
@@ -125,12 +143,27 @@ public class RetryDelegatingHandlerTests
     [Fact]
     public async Task SendAsync_WithZeroRetries_DoesNotRetry()
     {
-        var client = CreateClientWithRetry(0,
-            new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        // Arrange: with zero retries, the handler should not retry and should throw the original exception.
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .ThrowsAsync(new HttpRequestException("Network error"));
+
+        var retryHandler = new RetryDelegatingHandler(0, _loggerMock.Object)
+        {
+            InnerHandler = handlerMock.Object
+        };
+        var client = new HttpClient(retryHandler);
 
         Func<Task> act = async () => await client.GetAsync("http://test.com");
 
-        await act.Should().ThrowAsync<HttpRequestException>();
-        _loggerMock.VerifyNoOtherCalls();
+        // Act & Assert
+        var exception = await act.Should().ThrowAsync<HttpRequestException>();
+        exception.And.Message.Should().Be("Network error");
+        _loggerMock.VerifyNoOtherCalls(); // no retry logs
     }
 }

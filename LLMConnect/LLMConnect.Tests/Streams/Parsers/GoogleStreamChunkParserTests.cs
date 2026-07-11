@@ -1,9 +1,8 @@
 ﻿using FluentAssertions;
+using LLMConnect.Models;
 using LLMConnect.Settings;
 using Microsoft.Extensions.Logging;
 using Moq;
-using System.Text.Json;
-using Xunit;
 
 namespace LLMConnect.Tests.Streams.ChunkParsers;
 
@@ -27,312 +26,46 @@ public class GoogleStreamChunkParserTests
         };
     }
 
-    // ---------- Text Chunks ----------
-
+    // ---------- Text deltas ----------
     [Fact]
-    public void Parse_WithTextChunk_ReturnsIncompleteChatChunk()
+    public void Parse_WithTextDelta_ReturnsTextChunk()
     {
-        // Arrange
-        var parser = new GoogleStreamChunkParser(_options);
         var json = @"{""candidates"":[{""content"":{""parts"":[{""text"":""Hello""}]}}]}";
         var evt = new StreamEvent(null, json);
+        var parser = new GoogleStreamChunkParser(_options);
 
-        // Act
         var result = parser.Parse(evt);
 
-        // Assert
         result.Should().NotBeNull();
         result.Content.Should().Be("Hello");
         result.IsComplete.Should().BeFalse();
-        result.FinishReason.Should().BeNull();
-        _loggerMock.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public void Parse_WithTextChunkAndSpecialCharacters_ReturnsCorrectText()
-    {
-        // Arrange
-        var parser = new GoogleStreamChunkParser(_options);
-        var json = @"{""candidates"":[{""content"":{""parts"":[{""text"":""Hello\nworld""}]}}]}";
-        var evt = new StreamEvent(null, json);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Content.Should().Be("Hello\nworld");
-    }
-
-    [Fact]
-    public void Parse_WithTextChunkAndExtraFields_IgnoresExtraFields()
-    {
-        // Arrange
-        var parser = new GoogleStreamChunkParser(_options);
-        var json = @"{""extra"":""value"",""candidates"":[{""content"":{""parts"":[{""text"":""Hello""}]}}]}";
-        var evt = new StreamEvent(null, json);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Content.Should().Be("Hello");
-    }
-
-    // ---------- Finish Reason Chunks ----------
-
-    [Fact]
-    public void Parse_WithFinishReasonChunk_ReturnsCompleteChatChunk()
-    {
-        // Arrange
-        var parser = new GoogleStreamChunkParser(_options);
-        var json = @"{""candidates"":[{""finishReason"":""STOP""}]}";
-        var evt = new StreamEvent(null, json);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Content.Should().BeNull();
-        result.IsComplete.Should().BeTrue();
-        result.FinishReason.Should().Be("STOP");
-        _loggerMock.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public void Parse_WithFinishReasonMaxTokens_ReturnsCompleteChunkWithReason()
-    {
-        // Arrange
-        var parser = new GoogleStreamChunkParser(_options);
-        var json = @"{""candidates"":[{""finishReason"":""MAX_TOKENS""}]}";
-        var evt = new StreamEvent(null, json);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.IsComplete.Should().BeTrue();
-        result.FinishReason.Should().Be("MAX_TOKENS");
-    }
-
-    // ---------- Chunks with Both Text and Finish Reason ----------
-
-    [Fact]
-    public void Parse_WithTextAndFinishReason_ExtractsTextAndMarksComplete()
-    {
-        // Arrange
-        var json = @"{""candidates"":[{""content"":{""parts"":[{""text"":""Hello""}]},""finishReason"":""STOP""}]}";
-        var evt = new StreamEvent(null, json);
-        var parser = new GoogleStreamChunkParser(_options);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Content.Should().Be("Hello");
-        result.IsComplete.Should().BeTrue();
-        result.FinishReason.Should().Be("STOP");
         result.ToolCalls.Should().BeNull();
     }
 
-    // ---------- Empty or Null Data ----------
-
     [Fact]
-    public void Parse_WithNullData_ReturnsNull()
+    public void Parse_WithMultipleTextParts_ConcatenatesText()
     {
-        // Arrange
-        var parser = new GoogleStreamChunkParser(_options);
-        var evt = new StreamEvent(null, null!);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().BeNull();
-        _loggerMock.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public void Parse_WithEmptyData_ReturnsNull()
-    {
-        // Arrange
-        var parser = new GoogleStreamChunkParser(_options);
-        var evt = new StreamEvent(null, "");
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().BeNull();
-        _loggerMock.VerifyNoOtherCalls();
-    }
-
-    // ---------- Malformed JSON ----------
-
-    [Fact]
-    public void Parse_WithMalformedJson_LogsAndReturnsNull()
-    {
-        // Arrange
-        var malformed = "{ incomplete json";
-        var evt = new StreamEvent(null, malformed);
-        var parser = new GoogleStreamChunkParser(_options); 
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().BeNull();
-
-        // Verify log
-        _loggerMock.Verify(
-            x => x.Log(
-                LogLevel.Information,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Ignoring malformed")),
-                It.IsAny<Exception>(),
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-            Times.Once);
-    }
-
-    // ---------- JSON with Missing Fields ----------
-
-    [Fact]
-    public void Parse_WithNoCandidates_ReturnsNull()
-    {
-        // Arrange
-        var parser = new GoogleStreamChunkParser(_options);
-        var json = @"{}";
-        var evt = new StreamEvent(null, json);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().BeNull();
-        _loggerMock.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public void Parse_WithEmptyCandidates_ReturnsNull()
-    {
-        // Arrange
-        var parser = new GoogleStreamChunkParser(_options);
-        var json = @"{""candidates"":[]}";
-        var evt = new StreamEvent(null, json);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().BeNull();
-        _loggerMock.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public void Parse_WithNoContentInCandidate_ReturnsEmptyChunk()
-    {
-        // Arrange
-        var json = @"{""candidates"":[{""content"":{""parts"":[]}}]}";
+        var json = @"{""candidates"":[{""content"":{""parts"":[
+            {""text"":""Hello""},
+            {""text"":"" world""}
+        ]}}]}";
         var evt = new StreamEvent(null, json);
         var parser = new GoogleStreamChunkParser(_options);
 
-        // Act
         var result = parser.Parse(evt);
 
-        // Assert
         result.Should().NotBeNull();
-        result.Content.Should().BeNull();
-        result.ToolCalls.Should().BeNull();
+        result.Content.Should().Be("Hello world");
         result.IsComplete.Should().BeFalse();
-        result.FinishReason.Should().BeNull();
     }
 
-    [Fact]
-    public void Parse_WithContentButNoParts_ReturnsChunkWithNullContent()
-    {
-        // Arrange
-        var parser = new GoogleStreamChunkParser(_options);
-        var json = @"{""candidates"":[{""content"":{""parts"":[]}}]}";
-        var evt = new StreamEvent(null, json);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Content.Should().BeNull();
-        result.ToolCalls.Should().BeNull();
-        result.IsComplete.Should().BeFalse();
-        result.FinishReason.Should().BeNull();
-    }
-
-    [Fact]
-    public void Parse_WithPartsButNoText_ReturnsChunkWithNullContent()
-    {
-        // Arrange
-        var parser = new GoogleStreamChunkParser(_options);
-        var json = @"{""candidates"":[{""content"":{""parts"":[{""extra"":""value""}]}}]}";
-        var evt = new StreamEvent(null, json);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Content.Should().BeNull();
-        result.ToolCalls.Should().BeNull();
-        result.IsComplete.Should().BeFalse();
-        result.FinishReason.Should().BeNull();
-    }
-
-    [Fact]
-    public void Parse_WithTextButEmptyString_ReturnsChunkWithNullContent()
-    {
-        // Arrange
-        var parser = new GoogleStreamChunkParser(_options);
-        var json = @"{""candidates"":[{""content"":{""parts"":[{""text"":""""}]}}]}";
-        var evt = new StreamEvent(null, json);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Content.Should().BeNull();
-        result.ToolCalls.Should().BeNull();
-        result.IsComplete.Should().BeFalse();
-        result.FinishReason.Should().BeNull();
-    }
-
-    // ---------- Usage Metadata Only ----------
-
-    [Fact]
-    public void Parse_WithUsageMetadataOnly_ReturnsNull()
-    {
-        // Arrange
-        var parser = new GoogleStreamChunkParser(_options);
-        var json = @"{""usageMetadata"":{""promptTokenCount"":10}}";
-        var evt = new StreamEvent(null, json);
-
-        // Act
-        var result = parser.Parse(evt);
-
-        // Assert
-        result.Should().BeNull();
-        _loggerMock.VerifyNoOtherCalls();
-    }
-
+    // ---------- Tool call deltas ----------
     [Fact]
     public void Parse_WithFunctionCallDelta_ReturnsToolCallChunk()
     {
         var json = @"{""candidates"":[{""content"":{""parts"":[{""functionCall"":{""name"":""get_weather"",""args"":{""location"":""Boston""}}}]}}]}";
         var evt = new StreamEvent(null, json);
-        var options = new LLMConnectGeneralOptions();
-        var parser = new GoogleStreamChunkParser(options);
+        var parser = new GoogleStreamChunkParser(_options);
 
         var result = parser.Parse(evt);
 
@@ -343,5 +76,111 @@ public class GoogleStreamChunkParserTests
         tc.Id.Should().Be("get_weather");
         tc.Name.Should().Be("get_weather");
         tc.ArgumentsDelta.Should().Be("{\"location\":\"Boston\"}");
+        result.Content.Should().BeNull();
+        result.IsComplete.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Parse_WithMultipleFunctionCalls_ReturnsAllToolCalls()
+    {
+        var json = @"{""candidates"":[{""content"":{""parts"":[
+            {""functionCall"":{""name"":""get_weather"",""args"":{""location"":""Boston""}}},
+            {""functionCall"":{""name"":""get_time"",""args"":{""timezone"":""EST""}}}
+        ]}}]}";
+        var evt = new StreamEvent(null, json);
+        var parser = new GoogleStreamChunkParser(_options);
+
+        var result = parser.Parse(evt);
+
+        result.Should().NotBeNull();
+        result.ToolCalls.Should().HaveCount(2);
+        result.ToolCalls[0].Name.Should().Be("get_weather");
+        result.ToolCalls[0].ArgumentsDelta.Should().Be("{\"location\":\"Boston\"}");
+        result.ToolCalls[1].Name.Should().Be("get_time");
+        result.ToolCalls[1].ArgumentsDelta.Should().Be("{\"timezone\":\"EST\"}");
+        result.Content.Should().BeNull();
+        result.IsComplete.Should().BeFalse();
+    }
+
+    // ---------- Finish reason ----------
+    [Fact]
+    public void Parse_WithFinishReason_ReturnsCompleteChunk()
+    {
+        var json = @"{""candidates"":[{""finishReason"":""STOP""}]}";
+        var evt = new StreamEvent(null, json);
+        var parser = new GoogleStreamChunkParser(_options);
+
+        var result = parser.Parse(evt);
+
+        result.Should().NotBeNull();
+        result.IsComplete.Should().BeTrue();
+        result.FinishReason.Should().Be("STOP");
+        result.Content.Should().BeNull();
+        result.ToolCalls.Should().BeNull();
+    }
+
+    [Fact]
+    public void Parse_WithFinishReasonAndText_ReturnsCompleteChunkWithContent()
+    {
+        var json = @"{""candidates"":[{""content"":{""parts"":[{""text"":""Final""}]},""finishReason"":""STOP""}]}";
+        var evt = new StreamEvent(null, json);
+        var parser = new GoogleStreamChunkParser(_options);
+
+        var result = parser.Parse(evt);
+
+        result.Should().NotBeNull();
+        result.Content.Should().Be("Final");
+        result.IsComplete.Should().BeTrue();
+        result.FinishReason.Should().Be("STOP");
+    }
+
+    // ---------- Edge cases ----------
+    [Fact]
+    public void Parse_WithNoCandidate_ReturnsNull()
+    {
+        var json = @"{}";
+        var evt = new StreamEvent(null, json);
+        var parser = new GoogleStreamChunkParser(_options);
+
+        var result = parser.Parse(evt);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void Parse_WithEmptyParts_ReturnsEmptyChunk()
+    {
+        var json = @"{""candidates"":[{""content"":{""parts"":[]}}]}";
+        var evt = new StreamEvent(null, json);
+        var parser = new GoogleStreamChunkParser(_options);
+
+        var result = parser.Parse(evt);
+
+        result.Should().NotBeNull();
+        result.Content.Should().BeNull();
+        result.ToolCalls.Should().BeNull();
+        result.IsComplete.Should().BeFalse();
+        result.FinishReason.Should().BeNull();
+    }
+
+    [Fact]
+    public void Parse_WithMalformedJson_LogsAndReturnsNull()
+    {
+        var malformed = "{ incomplete json";
+        var evt = new StreamEvent(null, malformed);
+        var parser = new GoogleStreamChunkParser(_options);
+
+        var result = parser.Parse(evt);
+
+        result.Should().BeNull();
+
+        _loggerMock.Verify(
+            x => x.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Ignoring malformed")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
     }
 }

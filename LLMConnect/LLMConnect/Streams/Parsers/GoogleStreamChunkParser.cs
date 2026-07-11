@@ -23,27 +23,38 @@ internal class GoogleStreamChunkParser : ChunkParserBase<GoogleStreamChunkParser
 
             var result = new ChatChunk();
 
-            var textPart = candidate.Content?.Parts?.FirstOrDefault(p => p.Text != null);
-            if (textPart?.Text is string text && !string.IsNullOrEmpty(text))
-                result.Content = text;
+            // Collect all text parts and function call parts
+            var textParts = new List<string>();
+            var functionParts = new List<GoogleFunctionCall>();
 
-            var functionPart = candidate.Content?.Parts?.FirstOrDefault(p => p.FunctionCall != null);
-            if (functionPart?.FunctionCall != null)
+            if (candidate.Content?.Parts != null)
             {
-                var fc = functionPart.FunctionCall;
-                var argsJson = JsonSerializer.Serialize(fc.Args);
-                result.ToolCalls = new List<ToolCallDelta>
+                foreach (var part in candidate.Content.Parts)
                 {
-                    new ToolCallDelta
-                    {
-                        Index = 0,
-                        Id = fc.Name,
-                        Name = fc.Name,
-                        ArgumentsDelta = argsJson
-                    }
-                };
+                    if (!string.IsNullOrEmpty(part.Text))
+                        textParts.Add(part.Text);
+                    if (part.FunctionCall != null)
+                        functionParts.Add(part.FunctionCall);
+                }
             }
 
+            // Combine text parts (if multiple)
+            if (textParts.Any())
+                result.Content = string.Concat(textParts);
+
+            // Handle all function calls
+            if (functionParts.Any())
+            {
+                result.ToolCalls = functionParts.Select((fc, idx) => new ToolCallDelta
+                {
+                    Index = idx,
+                    Id = fc.Name, // Google uses function name as ID
+                    Name = fc.Name,
+                    ArgumentsDelta = JsonSerializer.Serialize(fc.Args)
+                }).ToList();
+            }
+
+            // Finish reason
             if (!string.IsNullOrEmpty(candidate.FinishReason))
             {
                 result.IsComplete = true;
